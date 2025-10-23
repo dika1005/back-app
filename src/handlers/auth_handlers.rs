@@ -1,0 +1,369 @@
+use axum::{ extract::{ State, Query }, response::IntoResponse, http::StatusCode, Json };
+use bcrypt::{ verify, hash, DEFAULT_COST };
+use serde::{ Deserialize, Serialize };
+use serde_json::Value;
+use std::{ collections::HashMap, sync::Arc };
+use sqlx::Row;
+use chrono::{ Utc, Duration as ChronoDuration };
+use jsonwebtoken::{ encode, Header, EncodingKey };
+use axum_extra::extract::cookie::{ Cookie, CookieJar };
+use time::Duration;
+use oauth2::{
+    basic::BasicClient,
+    reqwest::async_http_client,
+    AuthUrl,
+    AuthorizationCode,
+    ClientId,
+    ClientSecret,
+    CsrfToken,
+    RedirectUrl,
+    Scope,
+    TokenResponse,
+    TokenUrl,
+};
+use url::Url;
+use crate::AppState;
+
+// ======================================
+// DTO
+// ======================================
+#[derive(Deserialize)]
+pub struct RegisterRequest {
+    pub name: String,
+    pub email: String,
+    pub password: String,
+    pub alamat: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct RegisterResponse {
+    pub status: String,
+    pub message: String,
+    pub user: Option<UserData>,
+}
+
+#[derive(Serialize)]
+pub struct UserData {
+    pub name: String,
+    pub email: String,
+    pub alamat: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct LoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Serialize)]
+pub struct LoginResponse {
+    pub status: String,
+    pub message: String,
+    pub token: Option<String>,
+    pub user: Option<UserLoginData>,
+}
+
+#[derive(Serialize)]
+pub struct UserLoginData {
+    pub email: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,
+    pub exp: usize,
+}
+
+// ======================================
+// REGISTER HANDLER
+// ======================================
+pub async fn register_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<RegisterRequest>
+) -> Result<(StatusCode, Json<RegisterResponse>), (StatusCode, String)> {
+    let existing: Option<i64> = sqlx
+        ::query_scalar("SELECT COUNT(*) FROM users WHERE email = ?")
+        .bind(&payload.email)
+        .fetch_optional(&state.db).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .flatten();
+
+    if existing.unwrap_or(0) > 0 {
+        return Err((StatusCode::BAD_REQUEST, "Email sudah terdaftar".into()));
+    }
+
+    let hashed = hash(&payload.password, DEFAULT_COST).map_err(|e| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        e.to_string(),
+    ))?;
+
+    sqlx
+        ::query("INSERT INTO users (name, email, password, address) VALUES (?, ?, ?, ?)")
+        .bind(&payload.name)
+        .bind(&payload.email)
+        .bind(hashed)
+        .bind(&payload.alamat)
+        .execute(&state.db).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(RegisterResponse {
+            status: "success".into(),
+            message: "Registrasi berhasil!".into(),
+            user: Some(UserData {
+                name: payload.name,
+                email: payload.email,
+                alamat: payload.alamat,
+            }),
+        }),
+    ))
+}
+
+// ======================================
+// LOGIN HANDLER
+// ======================================
+pub async fn login_handler(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Json(payload): Json<LoginRequest>
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let user_option = sqlx
+        ::query("SELECT id, email, password FROM users WHERE email = ?")
+        .bind(&payload.email)
+        .fetch_optional(&state.db).await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let user = match user_option {
+        Some(u) => u,
+        None => {
+            return Err((StatusCode::UNAUTHORIZED, "Email atau password salah".into()));
+        }
+    };
+
+    let stored_password_hash: String = user.get("password");
+
+    if
+        !verify(&payload.password, &stored_password_hash).map_err(|_| (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Verifikasi gagal".into(),
+        ))?
+    {
+        return Err((StatusCode::UNAUTHORIZED, "Email atau password salah".into()));
+    }
+
+    let secret = std::env
+        ::var("JWT_SECRET")
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET not set".into()))?;
+
+    let expiration = Utc::now()
+        .checked_add_signed(ChronoDuration::hours(1))
+        .unwrap()
+        .timestamp() as usize;
+
+    let claims = Claims {
+        sub: payload.email.clone(),
+        exp: expiration,
+    };
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes())
+    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let cookie = Cookie::build(("jwt", token.clone()))
+        .http_only(true)
+        .secure(false) // ubah ke true kalau udah HTTPS
+        .path("/")
+        .max_age(Duration::hours(2))
+        .build();
+
+    let updated_jar = jar.add(cookie);
+
+    Ok((
+        updated_jar,
+        Json(LoginResponse {
+            status: "success".into(),
+            message: "Login berhasil!".into(),
+            token: Some(token),
+            user: Some(UserLoginData {
+                email: payload.email,
+            }),
+        }),
+    ))
+}
+
+// ======================================
+// LOGOUT HANDLER
+// ======================================
+pub async fn logout_handler(jar: CookieJar) -> impl IntoResponse {
+    let cookie = Cookie::build(("jwt", ""))
+        .http_only(true)
+        .path("/")
+        .max_age(Duration::seconds(0))
+        .build();
+
+    let jar = jar.add(cookie);
+
+    (
+        jar,
+        Json(
+            serde_json::json!({
+            "status": "success",
+            "message": "Logout berhasil!"
+        })
+        ),
+    )
+}
+
+// ======================================
+// GOOGLE AUTH HANDLER
+// ======================================
+pub async fn google_auth_handler() -> impl IntoResponse {
+    let client_id = ClientId::new(std::env::var("GOOGLE_CLIENT_ID").unwrap());
+    let client_secret = ClientSecret::new(std::env::var("GOOGLE_CLIENT_SECRET").unwrap());
+    let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".into()).unwrap();
+    let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".into()).unwrap();
+
+    let redirect_url = RedirectUrl::new(
+        "http://localhost:3001/auth/google/callback".into()
+    ).unwrap();
+
+    let client = BasicClient::new(
+        client_id,
+        Some(client_secret),
+        auth_url,
+        Some(token_url)
+    ).set_redirect_uri(redirect_url);
+
+    let (auth_url, _csrf_token) = client
+        .authorize_url(CsrfToken::new_random)
+        .add_scope(Scope::new("email".into()))
+        .add_scope(Scope::new("profile".into()))
+        .url();
+
+    (StatusCode::FOUND, [(axum::http::header::LOCATION, auth_url.to_string())])
+}
+
+// ======================================
+// GOOGLE CALLBACK HANDLER
+// ======================================
+pub async fn google_callback_handler(
+    State(state): State<Arc<AppState>>,
+    jar: CookieJar,
+    Query(params): Query<HashMap<String, String>>
+) -> impl IntoResponse {
+    let code = match params.get("code") {
+        Some(c) => c.clone(),
+        None => {
+            return (StatusCode::BAD_REQUEST, "Kode otorisasi tidak ditemukan").into_response();
+        }
+    };
+
+    let client_id = ClientId::new(std::env::var("GOOGLE_CLIENT_ID").unwrap());
+    let client_secret = ClientSecret::new(std::env::var("GOOGLE_CLIENT_SECRET").unwrap());
+    let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".into()).unwrap();
+    let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".into()).unwrap();
+    let redirect_url = RedirectUrl::new(
+        "http://localhost:3001/auth/google/callback".into()
+    ).unwrap();
+
+    let client = BasicClient::new(
+        client_id,
+        Some(client_secret),
+        auth_url,
+        Some(token_url)
+    ).set_redirect_uri(redirect_url);
+
+    let token_result = match
+        client.exchange_code(AuthorizationCode::new(code)).request_async(async_http_client).await
+    {
+        Ok(token) => token,
+        Err(e) => {
+            eprintln!("Error exchange token: {:?}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Gagal mengambil token").into_response();
+        }
+    };
+
+    let access_token = token_result.access_token().secret();
+
+    let user_info = match
+        reqwest::Client
+            ::new()
+            .get("https://www.googleapis.com/oauth2/v2/userinfo")
+            .bearer_auth(access_token)
+            .send().await
+    {
+        Ok(res) =>
+            match res.json::<Value>().await {
+                Ok(data) => data,
+                Err(_) => {
+                    return (StatusCode::BAD_REQUEST, "Gagal parsing data user").into_response();
+                }
+            }
+        Err(_) => {
+            return (StatusCode::BAD_REQUEST, "Gagal mengambil data user").into_response();
+        }
+    };
+
+    let email = user_info["email"].as_str().unwrap_or("").to_string();
+    let name = user_info["name"].as_str().unwrap_or("Pengguna Google").to_string();
+
+    let existing_user: Option<i64> = sqlx
+        ::query_scalar("SELECT COUNT(*) FROM users WHERE email = ?")
+        .bind(&email)
+        .fetch_optional(&state.db).await
+        .ok()
+        .flatten();
+
+    if existing_user.unwrap_or(0) == 0 {
+        let _ = sqlx
+            ::query("INSERT INTO users (name, email, password, address) VALUES (?, ?, ?, ?)")
+            .bind(&name)
+            .bind(&email)
+            .bind("")
+            .bind(None::<String>)
+            .execute(&state.db).await;
+    }
+
+    let secret = std::env::var("JWT_SECRET").unwrap();
+    let expiration = Utc::now()
+        .checked_add_signed(ChronoDuration::hours(2))
+        .unwrap()
+        .timestamp() as usize;
+
+    let claims = Claims {
+        sub: email.clone(),
+        exp: expiration,
+    };
+
+    let token = encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(secret.as_bytes())
+    ).unwrap();
+
+    let cookie = Cookie::build(("jwt", token.clone()))
+        .http_only(true)
+        .secure(false)
+        .path("/")
+        .max_age(Duration::hours(2))
+        .build();
+
+    let updated_jar = jar.add(cookie);
+
+    let user_data = UserLoginData {
+        email: email.clone(),
+    };
+
+    (
+        updated_jar,
+        Json(LoginResponse {
+            status: "success".into(),
+            message: "Login berhasil".into(),
+            token: Some(token),
+            user: Some(user_data),
+        }),
+    ).into_response()
+}
