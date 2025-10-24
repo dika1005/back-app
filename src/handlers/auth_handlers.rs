@@ -1,4 +1,5 @@
-use axum::{ extract::{ State, Query }, response::IntoResponse, http::StatusCode, Json };
+use axum::{ extract::{ State, Query, Path }, response::IntoResponse, http::StatusCode, Json };
+
 use bcrypt::{ verify, hash, DEFAULT_COST };
 use serde::{ Deserialize, Serialize };
 use serde_json::Value;
@@ -8,6 +9,12 @@ use chrono::{ Utc, Duration as ChronoDuration };
 use jsonwebtoken::{ encode, Header, EncodingKey };
 use axum_extra::extract::cookie::{ Cookie, CookieJar };
 use time::Duration;
+use jsonwebtoken::Validation;
+use serde_json::json;
+use jsonwebtoken::decode;
+use jsonwebtoken::DecodingKey;
+
+
 use oauth2::{
     basic::BasicClient,
     reqwest::async_http_client,
@@ -61,17 +68,25 @@ pub struct LoginResponse {
     pub message: String,
     pub token: Option<String>,
     pub user: Option<UserLoginData>,
+    
 }
 
 #[derive(Serialize)]
 pub struct UserLoginData {
     pub email: String,
+    pub role: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
+    pub role: String,
     pub exp: usize,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateRoleRequest {
+    pub role: String,
 }
 
 // ======================================
@@ -98,11 +113,12 @@ pub async fn register_handler(
     ))?;
 
     sqlx
-        ::query("INSERT INTO users (name, email, password, address) VALUES (?, ?, ?, ?)")
+        ::query("INSERT INTO users (name, email, password, address, role) VALUES (?, ?, ?, ?, ?)")
         .bind(&payload.name)
         .bind(&payload.email)
         .bind(hashed)
         .bind(&payload.alamat)
+        .bind("user")
         .execute(&state.db).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
@@ -129,7 +145,7 @@ pub async fn login_handler(
     Json(payload): Json<LoginRequest>
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let user_option = sqlx
-        ::query("SELECT id, email, password FROM users WHERE email = ?")
+        ::query("SELECT id, email, password, role FROM users WHERE email = ?")
         .bind(&payload.email)
         .fetch_optional(&state.db).await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -142,6 +158,7 @@ pub async fn login_handler(
     };
 
     let stored_password_hash: String = user.get("password");
+    let role: String = user.get("role");
 
     if
         !verify(&payload.password, &stored_password_hash).map_err(|_| (
@@ -161,8 +178,18 @@ pub async fn login_handler(
         .unwrap()
         .timestamp() as usize;
 
+    let role: Option<String> = sqlx
+        ::query_scalar("SELECT role FROM users WHERE email = ?")
+        .bind(&payload.email)
+        .fetch_optional(&state.db).await
+        .ok()
+        .flatten();
+
+    let role = role.unwrap_or_else(|| "user".to_string());
+
     let claims = Claims {
         sub: payload.email.clone(),
+        role: role.clone(),
         exp: expiration,
     };
 
@@ -189,6 +216,7 @@ pub async fn login_handler(
             token: Some(token),
             user: Some(UserLoginData {
                 email: payload.email,
+                role: role.clone(),
             }),
         }),
     ))
@@ -319,11 +347,14 @@ pub async fn google_callback_handler(
 
     if existing_user.unwrap_or(0) == 0 {
         let _ = sqlx
-            ::query("INSERT INTO users (name, email, password, address) VALUES (?, ?, ?, ?)")
+            ::query(
+                "INSERT INTO users (name, email, password, address, role) VALUES (?, ?, ?, ?, ?)"
+            )
             .bind(&name)
             .bind(&email)
             .bind("")
             .bind(None::<String>)
+            .bind("user")
             .execute(&state.db).await;
     }
 
@@ -335,6 +366,7 @@ pub async fn google_callback_handler(
 
     let claims = Claims {
         sub: email.clone(),
+        role : "user".to_string(),
         exp: expiration,
     };
 
@@ -355,6 +387,7 @@ pub async fn google_callback_handler(
 
     let user_data = UserLoginData {
         email: email.clone(),
+        role: "user".to_string(),
     };
 
     (
@@ -366,4 +399,54 @@ pub async fn google_callback_handler(
             user: Some(user_data),
         }),
     ).into_response()
+}
+
+pub async fn update_role_handler(
+    State(state): State<Arc<AppState>>,
+    Path(email): Path<String>,
+    jar: CookieJar,
+    Json(payload): Json<UpdateRoleRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    // 🔒 Ambil token JWT dari cookie
+    let token = match jar.get("jwt") {
+        Some(cookie) => cookie.value().to_string(),
+        None => return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".into())),
+    };
+
+    // 🔑 Ambil secret dari .env
+    let secret = std::env::var("JWT_SECRET")
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET tidak diset".into()))?;
+
+    // 🧾 Verifikasi token
+    let token_data = decode::<Claims>(
+        &token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    ).map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".into()))?;
+
+    // 🕵️‍♀️ Cek role user dari token
+    if token_data.claims.role != "admin" {
+        return Err((StatusCode::FORBIDDEN, "Kamu bukan admin, gak boleh ubah role!".into()));
+    }
+
+    // ✅ Validasi role yang boleh
+    if payload.role != "admin" && payload.role != "user" {
+        return Err((StatusCode::BAD_REQUEST, "Role tidak valid".into()));
+    }
+
+    // 💾 Update role di database
+    sqlx::query("UPDATE users SET role = ? WHERE email = ?")
+        .bind(&payload.role)
+        .bind(&email)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": format!("Role {} berhasil diubah menjadi {}", email, payload.role)
+        })),
+    ))
 }
