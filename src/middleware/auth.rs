@@ -1,47 +1,72 @@
-use axum::{
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::Response,
-};
+use axum::extract::FromRequestParts;
+use axum::http::{request::Parts, StatusCode};
+use axum_extra::extract::cookie::CookieJar; // <--- ini penting
 use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use serde::{Deserialize, Serialize};
+use std::{env, future::Future, pin::Pin};
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    sub: String,
-    role: String,
-    exp: usize,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Claims {
+    pub sub: String, // email user
+    pub role: String,
+    pub exp: usize,
 }
 
-pub async fn require_admin<B>(req: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
-    let cookie_header = req.headers().get("cookie")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("");
+#[derive(Clone, Debug)]
+pub struct AuthUser {
+    pub email: String,
+    pub role: String,
+}
 
-    let token = cookie_header
-        .split("; ")
-        .find_map(|c| c.strip_prefix("jwt="))
-        .unwrap_or("");
+#[allow(refining_impl_trait)]
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = (StatusCode, String);
 
-    if token.is_empty() {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    fn from_request_parts(
+        parts: &mut Parts,
+        _state: &S,
+    ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
+        // pakai async block biasa
+        async move {
+            // --- Ambil cookie dari header ---
+            let jar = CookieJar::from_headers(&parts.headers);
 
-    let secret = std::env::var("JWT_SECRET").unwrap();
+            // Ambil token dari header Authorization dulu (kalau ada)
+            let header_token = parts
+                .headers
+                .get("Authorization")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.strip_prefix("Bearer "))
+                .map(|s| s.to_string());
 
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::new(Algorithm::HS256)
-    );
+            // Kalau gak ada, coba ambil dari cookie "jwt"
+            let cookie_token = jar.get("jwt").map(|c| c.value().to_string());
 
-    match token_data {
-        Ok(data) => {
-            if data.claims.role != "admin" {
-                return Err(StatusCode::FORBIDDEN);
-            }
-            Ok(next.run(req).await)
+            // Pilih salah satu token yang ketemu
+            let token = header_token.or(cookie_token);
+
+            let token = match token {
+                Some(t) if !t.is_empty() => t,
+                _ => return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string())),
+            };
+
+            // --- Verifikasi token ---
+            let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "secret".to_string());
+
+            let token_data = decode::<Claims>(
+                &token,
+                &DecodingKey::from_secret(secret.as_bytes()),
+                &Validation::new(Algorithm::HS256),
+            )
+            .map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".to_string()))?;
+
+            Ok(AuthUser {
+                email: token_data.claims.sub,
+                role: token_data.claims.role,
+            })
         }
-        Err(_) => Err(StatusCode::UNAUTHORIZED),
     }
 }

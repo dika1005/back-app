@@ -8,8 +8,15 @@ use tower_http::cors::{CorsLayer, AllowOrigin, AllowMethods, AllowHeaders};
 mod db;
 mod routes;
 mod handlers;
+mod utils;
+mod middleware;
 
-use routes::auth_routes::auth_routes;
+
+use routes::{
+    auth_routes::auth_routes,
+    user_routes::user_routes,
+};
+
 
 // --- AppState (Global State) ---
 #[derive(Clone)]
@@ -36,6 +43,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(|| async { "Server connected to MySQL successfully!" }))
         .nest("/auth", auth_routes()) // <--- gabungin route auth di sini
+        .nest("/user", user_routes()) // <--- gabungin route user di sini
         .with_state(shared_state.clone()); // kasih state ke semua route
 
     // CORS disabled temporarily to avoid layering type mismatch.
