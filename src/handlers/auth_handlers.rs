@@ -4,7 +4,7 @@ use bcrypt::{ verify, hash, DEFAULT_COST };
 use serde::{ Deserialize, Serialize };
 use serde_json::Value;
 use std::{ collections::HashMap, sync::Arc };
-use sqlx::Row;
+use sqlx::Row; // Tetap simpan jika ada kode yang memerlukannya
 use chrono::{ Utc, Duration as ChronoDuration };
 use jsonwebtoken::{ encode, Header, EncodingKey };
 use axum_extra::extract::cookie::{ Cookie, CookieJar };
@@ -13,7 +13,6 @@ use jsonwebtoken::Validation;
 use serde_json::json;
 use jsonwebtoken::decode;
 use jsonwebtoken::DecodingKey;
-
 
 use oauth2::{
     basic::BasicClient,
@@ -29,10 +28,13 @@ use oauth2::{
     TokenUrl,
 };
 use url::Url;
+
+// Import AppState dan model User
 use crate::AppState;
+use crate::models::user::User;
 
 // ======================================
-// DTO
+// DTO (Dibiarkan sama)
 // ======================================
 #[derive(Deserialize)]
 pub struct RegisterRequest {
@@ -68,7 +70,6 @@ pub struct LoginResponse {
     pub message: String,
     pub token: Option<String>,
     pub user: Option<UserLoginData>,
-    
 }
 
 #[derive(Serialize)]
@@ -96,31 +97,30 @@ pub async fn register_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegisterRequest>
 ) -> Result<(StatusCode, Json<RegisterResponse>), (StatusCode, String)> {
-    let existing: Option<i64> = sqlx
-        ::query_scalar("SELECT COUNT(*) FROM users WHERE email = ?")
-        .bind(&payload.email)
-        .fetch_optional(&state.db).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .flatten();
+    // 1. Cek apakah email sudah terdaftar menggunakan model
+    let is_registered = User::exists_by_email(&state.db, &payload.email).await.map_err(|e| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        e.to_string(),
+    ))?;
 
-    if existing.unwrap_or(0) > 0 {
+    if is_registered {
         return Err((StatusCode::BAD_REQUEST, "Email sudah terdaftar".into()));
     }
 
+    // 2. Hash password
     let hashed = hash(&payload.password, DEFAULT_COST).map_err(|e| (
         StatusCode::INTERNAL_SERVER_ERROR,
         e.to_string(),
     ))?;
 
-    sqlx
-        ::query("INSERT INTO users (name, email, password, address, role) VALUES (?, ?, ?, ?, ?)")
-        .bind(&payload.name)
-        .bind(&payload.email)
-        .bind(hashed)
-        .bind(&payload.alamat)
-        .bind("user")
-        .execute(&state.db).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // 3. Masukkan ke database menggunakan model
+    User::insert(
+        &state.db,
+        &payload.name,
+        &payload.email,
+        &hashed,
+        payload.alamat.as_ref()
+    ).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok((
         StatusCode::CREATED,
@@ -144,11 +144,11 @@ pub async fn login_handler(
     jar: CookieJar,
     Json(payload): Json<LoginRequest>
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let user_option = sqlx
-        ::query("SELECT id, email, password, role FROM users WHERE email = ?")
-        .bind(&payload.email)
-        .fetch_optional(&state.db).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // 1. Cari user menggunakan model
+    let user_option = User::find_by_email(&state.db, &payload.email).await.map_err(|e| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        e.to_string(),
+    ))?;
 
     let user = match user_option {
         Some(u) => u,
@@ -157,9 +157,11 @@ pub async fn login_handler(
         }
     };
 
-    let stored_password_hash: String = user.get("password");
-    let role: String = user.get("role");
+    // Ambil data langsung dari struct User
+    let stored_password_hash: String = user.password;
+    let role: String = user.role;
 
+    // 2. Verifikasi password
     if
         !verify(&payload.password, &stored_password_hash).map_err(|_| (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -169,6 +171,7 @@ pub async fn login_handler(
         return Err((StatusCode::UNAUTHORIZED, "Email atau password salah".into()));
     }
 
+    // 3. Logika JWT (dibiarkan sama)
     let secret = std::env
         ::var("JWT_SECRET")
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET not set".into()))?;
@@ -177,15 +180,6 @@ pub async fn login_handler(
         .checked_add_signed(ChronoDuration::hours(1))
         .unwrap()
         .timestamp() as usize;
-
-    let role: Option<String> = sqlx
-        ::query_scalar("SELECT role FROM users WHERE email = ?")
-        .bind(&payload.email)
-        .fetch_optional(&state.db).await
-        .ok()
-        .flatten();
-
-    let role = role.unwrap_or_else(|| "user".to_string());
 
     let claims = Claims {
         sub: payload.email.clone(),
@@ -223,7 +217,7 @@ pub async fn login_handler(
 }
 
 // ======================================
-// LOGOUT HANDLER
+// LOGOUT HANDLER (Dibiarkan sama)
 // ======================================
 pub async fn logout_handler(jar: CookieJar) -> impl IntoResponse {
     let cookie = Cookie::build(("jwt", ""))
@@ -234,19 +228,14 @@ pub async fn logout_handler(jar: CookieJar) -> impl IntoResponse {
 
     let jar = jar.add(cookie);
 
-    (
-        jar,
-        Json(
-            serde_json::json!({
-            "status": "success",
-            "message": "Logout berhasil!"
-        })
-        ),
-    )
+    (jar, Json(serde_json::json!({
+  "status": "success",
+  "message": "Logout berhasil!"
+ })))
 }
 
 // ======================================
-// GOOGLE AUTH HANDLER
+// GOOGLE AUTH HANDLER (Dibiarkan sama)
 // ======================================
 pub async fn google_auth_handler() -> impl IntoResponse {
     let client_id = ClientId::new(std::env::var("GOOGLE_CLIENT_ID").unwrap());
@@ -282,13 +271,19 @@ pub async fn google_callback_handler(
     jar: CookieJar,
     Query(params): Query<HashMap<String, String>>
 ) -> impl IntoResponse {
+    // --- Langkah 1: Ambil Authorization Code ---
     let code = match params.get("code") {
         Some(c) => c.clone(),
         None => {
-            return (StatusCode::BAD_REQUEST, "Kode otorisasi tidak ditemukan").into_response();
+            // ✅ Perbaikan 1: Kembalikan (StatusCode, Json)
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"status": "error", "message": "Kode otorisasi tidak ditemukan"})),
+            ).into_response();
         }
     };
 
+    // --- Langkah 2: Inisialisasi OAuth2 Client ---
     let client_id = ClientId::new(std::env::var("GOOGLE_CLIENT_ID").unwrap());
     let client_secret = ClientSecret::new(std::env::var("GOOGLE_CLIENT_SECRET").unwrap());
     let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".into()).unwrap();
@@ -304,18 +299,24 @@ pub async fn google_callback_handler(
         Some(token_url)
     ).set_redirect_uri(redirect_url);
 
+    // --- Langkah 3: Tukar Code dengan Token ---
     let token_result = match
         client.exchange_code(AuthorizationCode::new(code)).request_async(async_http_client).await
     {
         Ok(token) => token,
         Err(e) => {
             eprintln!("Error exchange token: {:?}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Gagal mengambil token").into_response();
+            // ✅ Perbaikan 2: Kembalikan (StatusCode, Json)
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"status": "error", "message": "Gagal mengambil token"})),
+            ).into_response();
         }
     };
 
     let access_token = token_result.access_token().secret();
 
+    // --- Langkah 4: Ambil Info User dari Google ---
     let user_info = match
         reqwest::Client
             ::new()
@@ -327,37 +328,36 @@ pub async fn google_callback_handler(
             match res.json::<Value>().await {
                 Ok(data) => data,
                 Err(_) => {
-                    return (StatusCode::BAD_REQUEST, "Gagal parsing data user").into_response();
+                    // ✅ Perbaikan 3: Kembalikan (StatusCode, Json)
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"status": "error", "message": "Gagal parsing data user"})),
+                    ).into_response();
                 }
             }
         Err(_) => {
-            return (StatusCode::BAD_REQUEST, "Gagal mengambil data user").into_response();
+            // ✅ Perbaikan 4: Kembalikan (StatusCode, Json)
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"status": "error", "message": "Gagal mengambil data user"})),
+            ).into_response();
         }
     };
 
     let email = user_info["email"].as_str().unwrap_or("").to_string();
     let name = user_info["name"].as_str().unwrap_or("Pengguna Google").to_string();
 
-    let existing_user: Option<i64> = sqlx
-        ::query_scalar("SELECT COUNT(*) FROM users WHERE email = ?")
-        .bind(&email)
-        .fetch_optional(&state.db).await
-        .ok()
-        .flatten();
-
-    if existing_user.unwrap_or(0) == 0 {
-        let _ = sqlx
-            ::query(
-                "INSERT INTO users (name, email, password, address, role) VALUES (?, ?, ?, ?, ?)"
-            )
-            .bind(&name)
-            .bind(&email)
-            .bind("")
-            .bind(None::<String>)
-            .bind("user")
-            .execute(&state.db).await;
+    // --- Langkah 5: Upsert User di Database (Model) ---
+    if let Err(e) = User::upsert_google_user(&state.db, &email, &name).await {
+        eprintln!("Error saat upsert Google user: {:?}", e);
+        // Jika upsert gagal, kembalikan error 500
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"status": "error", "message": "Gagal menyimpan data pengguna"})),
+        ).into_response();
     }
 
+    // --- Langkah 6: Buat dan Encode JWT ---
     let secret = std::env::var("JWT_SECRET").unwrap();
     let expiration = Utc::now()
         .checked_add_signed(ChronoDuration::hours(2))
@@ -366,7 +366,7 @@ pub async fn google_callback_handler(
 
     let claims = Claims {
         sub: email.clone(),
-        role : "user".to_string(),
+        role: "user".to_string(),
         exp: expiration,
     };
 
@@ -376,6 +376,7 @@ pub async fn google_callback_handler(
         &EncodingKey::from_secret(secret.as_bytes())
     ).unwrap();
 
+    // --- Langkah 7: Buat Cookie dan Response Sukses ---
     let cookie = Cookie::build(("jwt", token.clone()))
         .http_only(true)
         .secure(false)
@@ -390,6 +391,7 @@ pub async fn google_callback_handler(
         role: "user".to_string(),
     };
 
+    // ✅ Perbaikan 5: Return sukses (CookieJar, Json) tanpa .into_response()
     (
         updated_jar,
         Json(LoginResponse {
@@ -397,31 +399,38 @@ pub async fn google_callback_handler(
             message: "Login berhasil".into(),
             token: Some(token),
             user: Some(user_data),
+            
         }),
     ).into_response()
 }
 
+// ======================================
+// UPDATE ROLE HANDLER
+// ======================================
 pub async fn update_role_handler(
     State(state): State<Arc<AppState>>,
     Path(email): Path<String>,
     jar: CookieJar,
-    Json(payload): Json<UpdateRoleRequest>,
+    Json(payload): Json<UpdateRoleRequest>
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     // 🔒 Ambil token JWT dari cookie
     let token = match jar.get("jwt") {
         Some(cookie) => cookie.value().to_string(),
-        None => return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".into())),
+        None => {
+            return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".into()));
+        }
     };
 
     // 🔑 Ambil secret dari .env
-    let secret = std::env::var("JWT_SECRET")
+    let secret = std::env
+        ::var("JWT_SECRET")
         .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET tidak diset".into()))?;
 
     // 🧾 Verifikasi token
     let token_data = decode::<Claims>(
         &token,
         &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::default(),
+        &Validation::default()
     ).map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".into()))?;
 
     // 🕵️‍♀️ Cek role user dari token
@@ -434,19 +443,19 @@ pub async fn update_role_handler(
         return Err((StatusCode::BAD_REQUEST, "Role tidak valid".into()));
     }
 
-    // 💾 Update role di database
-    sqlx::query("UPDATE users SET role = ? WHERE email = ?")
-        .bind(&payload.role)
-        .bind(&email)
-        .execute(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // 💾 Update role di database menggunakan model
+    User::update_role(&state.db, &email, &payload.role).await.map_err(|e| (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        e.to_string(),
+    ))?;
 
     Ok((
         StatusCode::OK,
-        Json(json!({
-            "status": "success",
-            "message": format!("Role {} berhasil diubah menjadi {}", email, payload.role)
-        })),
+        Json(
+            json!({
+  "status": "success",
+  "message": format!("Role {} berhasil diubah menjadi {}", email, payload.role)
+ })
+        ),
     ))
 }

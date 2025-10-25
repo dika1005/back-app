@@ -6,50 +6,49 @@ use tokio::net::TcpListener;
 use tower_http::cors::{CorsLayer, AllowOrigin, AllowMethods, AllowHeaders};
 
 mod db;
+mod models;
 mod routes;
 mod handlers;
 mod utils;
 mod middleware;
 
+use routes::{auth_routes::auth_routes, user_routes::user_routes};
 
-use routes::{
-    auth_routes::auth_routes,
-    user_routes::user_routes,
-};
-
-
-// --- AppState (Global State) ---
+// ========================
+// Struct Global AppState
+// ========================
 #[derive(Clone)]
 pub struct AppState {
     pub db: Pool<MySql>,
 }
 
+// ========================
+// Main Function
+// ========================
 #[tokio::main]
 async fn main() {
     dotenv().ok();
 
-    // --- Koneksi ke Database ---
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL harus diatur di .env");
-    let pool = Pool::<MySql>::connect(&database_url)
+    // --- 1. Koneksi Database ---
+    let database_url = env::var("DATABASE_URL").expect("❌ DATABASE_URL harus diatur di .env");
+    let db_pool = Pool::<MySql>::connect(&database_url)
         .await
-        .expect("Gagal konek ke MySQL");
+        .expect("❌ Gagal konek ke MySQL");
 
     println!("✅ Connected to MySQL successfully!");
 
-    // --- Bungkus ke Arc<AppState> biar thread-safe dan bisa dishare ---
-    let shared_state = Arc::new(AppState { db: pool });
+    // --- 2. Shared State ---
+    let shared_state = Arc::new(AppState { db: db_pool });
 
-    // --- Buat Router dan gabungkan semua routes ---
+    // --- 3. Setup Router ---
     let app = Router::new()
-        .route("/", get(|| async { "Server connected to MySQL successfully!" }))
-        .nest("/auth", auth_routes()) // <--- gabungin route auth di sini
-        .nest("/user", user_routes()) // <--- gabungin route user di sini
-        .with_state(shared_state.clone()); // kasih state ke semua route
+        .route("/", get(root_handler))
+        .nest("/auth", auth_routes())
+        .nest("/user", user_routes())
+        .with_state(shared_state)
+        .layer(cors_layer()); // tambahkan CORS layer
 
-    // CORS disabled temporarily to avoid layering type mismatch.
-    // If needed, re-enable after dependency version alignment.
-
-    // --- Jalankan Server ---
+    // --- 4. Jalankan Server ---
     let host = env::var("BIND_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let port: u16 = env::var("BIND_PORT")
         .ok()
@@ -57,9 +56,24 @@ async fn main() {
         .unwrap_or(3001);
 
     let addr = SocketAddr::from((host.parse::<std::net::IpAddr>().unwrap(), port));
-
     println!("🚀 Server running at http://{}", addr);
 
     let listener = TcpListener::bind(addr).await.unwrap();
     serve(listener, app.into_make_service()).await.unwrap();
+}
+
+// ========================
+// Handlers & Utils Lokal
+// ========================
+
+async fn root_handler() -> &'static str {
+    "Server connected to MySQL successfully!"
+}
+
+// CORS Setup biar modular & bersih
+fn cors_layer() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::any())
+        .allow_methods(AllowMethods::any())
+        .allow_headers(AllowHeaders::any())
 }
