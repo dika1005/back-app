@@ -1,7 +1,6 @@
 use axum::{ extract::{ State, Query, Path }, response::IntoResponse, http::StatusCode, Json };
 
 use bcrypt::{ verify, hash, DEFAULT_COST };
-use serde::{ Deserialize, Serialize };
 use serde_json::Value;
 use std::{ collections::HashMap, sync::Arc };
  // Tetap simpan jika ada kode yang memerlukannya

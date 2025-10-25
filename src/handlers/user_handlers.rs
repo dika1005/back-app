@@ -1,5 +1,4 @@
 use axum::{ extract::{ State, Json }, response::IntoResponse, http::StatusCode };
-use serde::{ Deserialize};
 use std::sync::Arc;
 
 use crate::middleware::auth::AuthUser;
