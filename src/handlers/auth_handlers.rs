@@ -3,15 +3,10 @@ use axum::{ extract::{ State, Query, Path }, response::IntoResponse, http::Statu
 use bcrypt::{ verify, hash, DEFAULT_COST };
 use serde_json::Value;
 use std::{ collections::HashMap, sync::Arc };
- // Tetap simpan jika ada kode yang memerlukannya
-use chrono::{ Utc, Duration as ChronoDuration };
-use jsonwebtoken::{ encode, Header, EncodingKey };
+use jsonwebtoken::{ Validation, decode, DecodingKey };
 use axum_extra::extract::cookie::{ Cookie, CookieJar };
 use time::Duration;
-use jsonwebtoken::Validation;
 use serde_json::json;
-use jsonwebtoken::decode;
-use jsonwebtoken::DecodingKey;
 
 use oauth2::{
     basic::BasicClient,
@@ -27,16 +22,24 @@ use oauth2::{
     TokenUrl,
 };
 
-
 // Import AppState dan model User
 use crate::AppState;
 use crate::models::user::User;
 use crate::dtos::auth::{
-    RegisterRequest, RegisterResponse, UserData,
-    LoginRequest, LoginResponse, UserLoginData,
-    Claims, UpdateRoleRequest
+    RegisterRequest,
+    RegisterResponse,
+    UserData,
+    LoginRequest,
+    LoginResponse,
+    UserLoginData,
+    Claims,
+    UpdateRoleRequest,
 };
+use crate::utils::jwt::create_jwt;
 
+// ======================================
+// REGISTER HANDLER
+// ======================================
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegisterRequest>
@@ -115,33 +118,18 @@ pub async fn login_handler(
         return Err((StatusCode::UNAUTHORIZED, "Email atau password salah".into()));
     }
 
-    // 3. Logika JWT (dibiarkan sama)
-    let secret = std::env
-        ::var("JWT_SECRET")
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET not set".into()))?;
+    // 3. BUAT TOKEN MENGGUNAKAN UTILS (1 jam)
+    let token = create_jwt(payload.email.clone(), role.clone(), 1).map_err(|(status, msg)| (
+        status,
+        msg,
+    ))?;
 
-    let expiration = Utc::now()
-        .checked_add_signed(ChronoDuration::hours(1))
-        .unwrap()
-        .timestamp() as usize;
-
-    let claims = Claims {
-        sub: payload.email.clone(),
-        role: role.clone(),
-        exp: expiration,
-    };
-
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret.as_bytes())
-    ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
+    // 4. Buat cookie dan response
     let cookie = Cookie::build(("jwt", token.clone()))
         .http_only(true)
         .secure(false) // ubah ke true kalau udah HTTPS
         .path("/")
-        .max_age(Duration::hours(2))
+        .max_age(Duration::hours(2)) // Max age cookie
         .build();
 
     let updated_jar = jar.add(cookie);
@@ -173,9 +161,9 @@ pub async fn logout_handler(jar: CookieJar) -> impl IntoResponse {
     let jar = jar.add(cookie);
 
     (jar, Json(serde_json::json!({
-  "status": "success",
-  "message": "Logout berhasil!"
- })))
+    "status": "success",
+    "message": "Logout berhasil!"
+    })))
 }
 
 // ======================================
@@ -219,7 +207,6 @@ pub async fn google_callback_handler(
     let code = match params.get("code") {
         Some(c) => c.clone(),
         None => {
-            // ✅ Perbaikan 1: Kembalikan (StatusCode, Json)
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({"status": "error", "message": "Kode otorisasi tidak ditemukan"})),
@@ -236,6 +223,7 @@ pub async fn google_callback_handler(
         "http://localhost:3001/auth/google/callback".into()
     ).unwrap();
 
+    // 🌟 DEKLARASI CLIENT DI SINI (Memperbaiki E0425)
     let client = BasicClient::new(
         client_id,
         Some(client_secret),
@@ -250,7 +238,6 @@ pub async fn google_callback_handler(
         Ok(token) => token,
         Err(e) => {
             eprintln!("Error exchange token: {:?}", e);
-            // ✅ Perbaikan 2: Kembalikan (StatusCode, Json)
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({"status": "error", "message": "Gagal mengambil token"})),
@@ -272,7 +259,6 @@ pub async fn google_callback_handler(
             match res.json::<Value>().await {
                 Ok(data) => data,
                 Err(_) => {
-                    // ✅ Perbaikan 3: Kembalikan (StatusCode, Json)
                     return (
                         StatusCode::BAD_REQUEST,
                         Json(json!({"status": "error", "message": "Gagal parsing data user"})),
@@ -280,7 +266,6 @@ pub async fn google_callback_handler(
                 }
             }
         Err(_) => {
-            // ✅ Perbaikan 4: Kembalikan (StatusCode, Json)
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({"status": "error", "message": "Gagal mengambil data user"})),
@@ -294,31 +279,16 @@ pub async fn google_callback_handler(
     // --- Langkah 5: Upsert User di Database (Model) ---
     if let Err(e) = User::upsert_google_user(&state.db, &email, &name).await {
         eprintln!("Error saat upsert Google user: {:?}", e);
-        // Jika upsert gagal, kembalikan error 500
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"status": "error", "message": "Gagal menyimpan data pengguna"})),
         ).into_response();
     }
 
-    // --- Langkah 6: Buat dan Encode JWT ---
-    let secret = std::env::var("JWT_SECRET").unwrap();
-    let expiration = Utc::now()
-        .checked_add_signed(ChronoDuration::hours(2))
-        .unwrap()
-        .timestamp() as usize;
-
-    let claims = Claims {
-        sub: email.clone(),
-        role: "user".to_string(),
-        exp: expiration,
-    };
-
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(secret.as_bytes())
-    ).unwrap();
+    // --- Langkah 6: BUAT TOKEN MENGGUNAKAN UTILS (2 jam)
+    let token = create_jwt(email.clone(), "user".to_string(), 2).expect(
+        "Gagal membuat token JWT untuk Google Auth"
+    );
 
     // --- Langkah 7: Buat Cookie dan Response Sukses ---
     let cookie = Cookie::build(("jwt", token.clone()))
@@ -335,7 +305,7 @@ pub async fn google_callback_handler(
         role: "user".to_string(),
     };
 
-    // ✅ Perbaikan 5: Return sukses (CookieJar, Json) tanpa .into_response()
+    // ✅ Return sukses
     (
         updated_jar,
         Json(LoginResponse {
@@ -343,7 +313,6 @@ pub async fn google_callback_handler(
             message: "Login berhasil".into(),
             token: Some(token),
             user: Some(user_data),
-            
         }),
     ).into_response()
 }
@@ -397,9 +366,9 @@ pub async fn update_role_handler(
         StatusCode::OK,
         Json(
             json!({
-  "status": "success",
-  "message": format!("Role {} berhasil diubah menjadi {}", email, payload.role)
- })
+    "status": "success",
+    "message": format!("Role {} berhasil diubah menjadi {}", email, payload.role)
+    })
         ),
     ))
 }
