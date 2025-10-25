@@ -4,7 +4,7 @@ use bcrypt::{ verify, hash, DEFAULT_COST };
 use serde::{ Deserialize, Serialize };
 use serde_json::Value;
 use std::{ collections::HashMap, sync::Arc };
-use sqlx::Row; // Tetap simpan jika ada kode yang memerlukannya
+ // Tetap simpan jika ada kode yang memerlukannya
 use chrono::{ Utc, Duration as ChronoDuration };
 use jsonwebtoken::{ encode, Header, EncodingKey };
 use axum_extra::extract::cookie::{ Cookie, CookieJar };
@@ -27,7 +27,7 @@ use oauth2::{
     TokenResponse,
     TokenUrl,
 };
-use url::Url;
+
 
 // Import AppState dan model User
 use crate::AppState;

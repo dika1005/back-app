@@ -3,7 +3,7 @@ use axum::http::{request::Parts, StatusCode};
 use axum_extra::extract::cookie::CookieJar; // <--- ini penting
 use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
 use serde::{Deserialize, Serialize};
-use std::{env, future::Future, pin::Pin};
+use std::{env, future::Future};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {

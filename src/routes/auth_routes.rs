@@ -1,5 +1,4 @@
 use axum::{Router, routing::{post, get}};
-use axum::extract::Path;
 use std::sync::Arc;
 use crate::handlers::auth_handlers::{
     register_handler,

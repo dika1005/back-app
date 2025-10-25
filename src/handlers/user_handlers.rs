@@ -1,11 +1,11 @@
 use axum::{ extract::{ State, Json }, response::IntoResponse, http::StatusCode };
-use serde::{ Deserialize, Serialize };
+use serde::{ Deserialize};
 use std::sync::Arc;
 
 use crate::middleware::auth::AuthUser;
 use crate::{ AppState, utils::ApiResponse };
 // Import UserProfile (jika dipindahkan ke model), atau gunakan dari model
-use crate::models::user::{ User, UserProfile };
+use crate::models::user::{ User };
 
 // Hapus definisi UserProfile di sini karena sudah dipindahkan ke model
 

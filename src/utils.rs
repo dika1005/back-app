@@ -5,7 +5,7 @@ pub struct ApiResponse<T> {
     pub status: String,
     pub message: String,
     pub data: Option<T>,
-} 
+}
 
 impl<T> ApiResponse<T> {
     pub fn success(msg: &str) -> Self {
