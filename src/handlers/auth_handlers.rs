@@ -32,67 +32,12 @@ use oauth2::{
 // Import AppState dan model User
 use crate::AppState;
 use crate::models::user::User;
+use crate::dtos::auth::{
+    RegisterRequest, RegisterResponse, UserData,
+    LoginRequest, LoginResponse, UserLoginData,
+    Claims, UpdateRoleRequest
+};
 
-// ======================================
-// DTO (Dibiarkan sama)
-// ======================================
-#[derive(Deserialize)]
-pub struct RegisterRequest {
-    pub name: String,
-    pub email: String,
-    pub password: String,
-    pub alamat: Option<String>,
-}
-
-#[derive(Serialize)]
-pub struct RegisterResponse {
-    pub status: String,
-    pub message: String,
-    pub user: Option<UserData>,
-}
-
-#[derive(Serialize)]
-pub struct UserData {
-    pub name: String,
-    pub email: String,
-    pub alamat: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct LoginRequest {
-    pub email: String,
-    pub password: String,
-}
-
-#[derive(Serialize)]
-pub struct LoginResponse {
-    pub status: String,
-    pub message: String,
-    pub token: Option<String>,
-    pub user: Option<UserLoginData>,
-}
-
-#[derive(Serialize)]
-pub struct UserLoginData {
-    pub email: String,
-    pub role: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Claims {
-    pub sub: String,
-    pub role: String,
-    pub exp: usize,
-}
-
-#[derive(Deserialize)]
-pub struct UpdateRoleRequest {
-    pub role: String,
-}
-
-// ======================================
-// REGISTER HANDLER
-// ======================================
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegisterRequest>

@@ -7,16 +7,8 @@ use crate::AppState;
 use crate::utils::ApiResponse;
 // Import UserProfile (jika dipindahkan ke model), atau gunakan dari model
 use crate::models::user::{ User };
+use crate::dtos::user::UpdateProfile;
 
-// Hapus definisi UserProfile di sini karena sudah dipindahkan ke model
-
-// DTO untuk request update
-#[derive(Deserialize)]
-pub struct UpdateProfile {
-    pub name: Option<String>,
-    pub email: Option<String>,
-    pub password: Option<String>, // CATATAN: Ini harus di-hash sebelum dikirim ke model!
-}
 
 pub async fn get_profile(
     State(state): State<Arc<AppState>>,

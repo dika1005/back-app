@@ -7,6 +7,7 @@ use tower_http::cors::{CorsLayer, AllowOrigin, AllowMethods, AllowHeaders};
 
 mod db;
 mod models;
+mod dtos;
 mod routes;
 mod handlers;
 mod utils;
