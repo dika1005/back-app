@@ -1,5 +1,6 @@
 use sqlx::{ MySql, Pool };
 use serde::{ Serialize, Deserialize };
+use sqlx::FromRow;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
@@ -8,6 +9,14 @@ pub struct User {
     pub email: String,
     pub password: String,
     pub address: Option<String>,
+    pub role: String,
+}
+#[derive(Debug, Serialize, Deserialize, Clone, FromRow)]
+pub struct UserProfile {
+    pub id: i64,
+    pub name: String,
+    pub email: String,
+    // Asumsi role juga ada di table users
     pub role: String,
 }
 
@@ -90,6 +99,43 @@ impl User {
                 .bind("user")
                 .execute(pool).await?;
         }
+
+        Ok(())
+    }
+
+    pub async fn find_profile_by_email(
+        pool: &Pool<MySql>,
+        email: &str
+    ) -> Result<Option<UserProfile>, sqlx::Error> {
+        // Karena UserProfile memiliki subset field, kita bisa pakai query_as langsung
+        sqlx
+            ::query_as::<_, UserProfile>("SELECT id, name, email, role FROM users WHERE email = ?")
+            .bind(email)
+            .fetch_optional(pool).await
+    }
+
+    // 🌟 METHOD BARU 2: Update Profile
+    pub async fn update_profile_data(
+        pool: &Pool<MySql>,
+        current_email: &str,
+        new_name: &Option<String>,
+        new_email: &Option<String>,
+        new_password: &Option<String> // Ini seharusnya hashed password
+    ) -> Result<(), sqlx::Error> {
+        // Menggunakan COALESCE agar hanya field yang ada (NOT NULL) yang diupdate
+        sqlx
+            ::query(
+                "UPDATE users 
+            SET name = COALESCE(?, name), 
+                email = COALESCE(?, email), 
+                password = COALESCE(?, password)
+            WHERE email = ?"
+            )
+            .bind(new_name)
+            .bind(new_email)
+            .bind(new_password)
+            .bind(current_email)
+            .execute(pool).await?;
 
         Ok(())
     }
