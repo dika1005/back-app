@@ -1,14 +1,13 @@
 // src/dtos/product_dto.rs
 
 use serde::{Deserialize, Serialize};
-// Use f64 for price to avoid bigdecimal/sqlx trait issues for now
 
 // Data yang diterima saat membuat Produk baru (POST)
 #[derive(Debug, Deserialize)]
 pub struct NewRodProductDto {
     pub name: String,
     pub description: String,
-    pub category_id: i32, // Foreign Key
+    pub category_id: i32, 
     pub rod_length: String,
     pub line_weight: String,
     pub cast_weight: String,
