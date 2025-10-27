@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 axum = { version = "0.8", features = ["macros", "query", "json"] }
 tokio = { version = "1.43", features = ["full"] }
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "macros"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "macros", "bigdecimal"] }
 dotenvy = "0.15"
 
 tower-http = { version = "0.5", features = ["cors"] }
@@ -23,6 +23,7 @@ url = "2"
 oauth2 = "4"
 async-trait = "0.1"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+bigdecimal = { version = "0.4", features = ["serde"] }
 
 
 [profile.dev]

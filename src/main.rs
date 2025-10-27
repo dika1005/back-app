@@ -13,7 +13,7 @@ mod handlers;
 mod utils;
 mod middleware;
 
-use routes::{auth_routes::auth_routes, user_routes::user_routes};
+use routes::{auth_routes::auth_routes, user_routes::user_routes, category_routes::category_routes, product_routes::product_routes};
 
 // ========================
 // Struct Global AppState
@@ -46,6 +46,8 @@ async fn main() {
         .route("/", get(root_handler))
         .nest("/auth", auth_routes())
         .nest("/user", user_routes())
+        .nest("/categories", category_routes())
+        .nest("/products", product_routes())
         .with_state(shared_state)
         .layer(cors_layer()); // tambahkan CORS layer
 
