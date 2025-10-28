@@ -31,12 +31,8 @@ async fn main() {
     dotenv().ok();
 
     // --- 1. Koneksi Database ---
-    let database_url = env::var("DATABASE_URL").expect("❌ DATABASE_URL harus diatur di .env");
-    let db_pool = Pool::<MySql>::connect(&database_url)
-        .await
-        .expect("❌ Gagal konek ke MySQL");
-
-    println!("✅ Connected to MySQL successfully!");
+    // Gunakan helper `db::init_db()` agar koneksi pool dikelola di satu tempat
+    let db_pool = db::init_db().await;
 
     // --- 2. Shared State ---
     let shared_state = Arc::new(AppState { db: db_pool });

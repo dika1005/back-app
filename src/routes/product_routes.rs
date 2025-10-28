@@ -1,6 +1,6 @@
 // src/routes/product_routes.rs
 
-use axum::{Router, routing::{get, post, put, delete}};
+use axum::{Router, routing::get};
 use crate::handlers::product_handlers::{
     get_all_products, create_product, find_product_by_id, update_product, delete_product
 };

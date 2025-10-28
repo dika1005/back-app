@@ -4,7 +4,7 @@ use axum::{ extract::{ Path, State, Json }, response::IntoResponse, http::Status
 use std::sync::Arc;
 use crate::AppState;
 use crate::utils::ApiResponse;
-use crate::dtos::product::{ NewRodProductDto, RodProductDetail, RodProduct };
+use crate::dtos::product::{ NewRodProductDto, RodProduct };
 use crate::middleware::auth::AdminAuth; // 1. TAMBAH GUARD
 // Hapus: use crate::middleware::auth::AuthUser; (Tidak diperlukan karena AdminAuth mengurusnya)
 

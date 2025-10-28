@@ -10,6 +10,7 @@ pub struct ApiResponse<T> {
     pub data: Option<T>,
 }
 
+#[allow(dead_code)]
 impl<T: Serialize> ApiResponse<T> {
     // success (digunakan untuk PUT/DELETE success message, tidak ada data)
     pub fn success(msg: &str) -> Self {

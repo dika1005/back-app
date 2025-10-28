@@ -19,6 +19,7 @@ pub struct AuthUser {
 }
 
 #[derive(Clone, Debug)]
+#[allow(dead_code)]
 pub struct AdminAuth(pub AuthUser); // Wrapper untuk AuthUser
 
 #[allow(refining_impl_trait)]

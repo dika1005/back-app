@@ -1,6 +1,6 @@
 // src/routes/kategori_routes.rs
 
-use axum::{Router, routing::{get, post, put, delete}};
+use axum::{Router, routing::get};
 use crate::handlers::category_handlers::{
     get_all_categories, create_category, get_category_by_id, update_category, delete_category
 };

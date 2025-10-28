@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::AppState;
 use crate::utils::ApiResponse;
 use crate::models::category::KategoriModel; // <-- IMPORT STRUCT MODEL YANG BENAR
-use crate::dtos::category::{ KategoriDto, NewKategoriDto };
+use crate::dtos::category::{ NewKategoriDto };
 use crate::middleware::auth::AdminAuth; // <-- IMPORT ADMINAUTH
 
 // Type alias untuk Result yang konsisten dengan rejection AdminAuth

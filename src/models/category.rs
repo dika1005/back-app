@@ -2,7 +2,7 @@
 
 use sqlx::{MySql, Pool};
 use crate::dtos::category::{KategoriDto, NewKategoriDto};
-use sqlx::FromRow; // Wajib diimpor jika tidak diimpor di file DTO
+// use sqlx::FromRow; // tidak dipakai di file ini (jika diperlukan, import di DTO yang sesuai)
 
 // Asumsi: Kita buat struct KategoriModel untuk mengelompokkan method
 pub struct KategoriModel; 
@@ -49,22 +49,5 @@ impl KategoriModel {
 }
 
 // Convenience module-level wrappers used by handlers (names expected by handlers)
-pub async fn find_all_kategori(pool: &Pool<MySql>) -> Result<Vec<KategoriDto>, sqlx::Error> {
-    KategoriModel::find_all(pool).await
-}
-
-pub async fn create(pool: &Pool<MySql>, new_kategori: NewKategoriDto) -> Result<u64, sqlx::Error> {
-    KategoriModel::insert(pool, new_kategori).await
-}
-
-pub async fn find_kategori_by_id(pool: &Pool<MySql>, id: i32) -> Result<Option<KategoriDto>, sqlx::Error> {
-    KategoriModel::find_by_id(pool, id).await
-}
-
-pub async fn update_kategori(pool: &Pool<MySql>, id: i32, updated_name: String) -> Result<u64, sqlx::Error> {
-    KategoriModel::update(pool, id, &updated_name).await
-}
-
-pub async fn delete_kategori(pool: &Pool<MySql>, id: i32) -> Result<u64, sqlx::Error> {
-    KategoriModel::delete(pool, id).await
-}
+// Note: convenience wrappers removed because handlers call KategoriModel::* directly.
+// If other modules need wrappers with these names, re-add them or expose via pub API.
