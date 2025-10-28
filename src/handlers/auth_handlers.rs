@@ -3,7 +3,7 @@ use axum::{ extract::{ State, Query, Path }, response::IntoResponse, http::Statu
 use bcrypt::{ verify, hash, DEFAULT_COST };
 use serde_json::Value;
 use std::{ collections::HashMap, sync::Arc };
-use jsonwebtoken::{ Validation, decode, DecodingKey };
+// use jsonwebtoken::{ Validation, decode, DecodingKey };
 use axum_extra::extract::cookie::{ Cookie, CookieJar };
 use time::Duration;
 use serde_json::json;
@@ -36,6 +36,7 @@ use crate::dtos::auth::{
     UpdateRoleRequest,
 };
 use crate::utils::jwt::create_jwt;
+use crate::utils::jwt::verify_jwt;
 
 // ======================================
 // REGISTER HANDLER
@@ -125,9 +126,11 @@ pub async fn login_handler(
     ))?;
 
     // 4. Buat cookie dan response
+    let secure_cookie = std::env::var("SECURE_COOKIE").unwrap_or_else(|_| "false".into()) == "true";
+
     let cookie = Cookie::build(("jwt", token.clone()))
         .http_only(true)
-        .secure(false) // ubah ke true kalau udah HTTPS
+        .secure(secure_cookie)
         .path("/")
         .max_age(Duration::hours(2)) // Max age cookie
         .build();
@@ -155,6 +158,7 @@ pub async fn logout_handler(jar: CookieJar) -> impl IntoResponse {
     let cookie = Cookie::build(("jwt", ""))
         .http_only(true)
         .path("/")
+        .secure(std::env::var("SECURE_COOKIE").unwrap_or_else(|_| "false".into()) == "true")
         .max_age(Duration::seconds(0))
         .build();
 
@@ -293,7 +297,7 @@ pub async fn google_callback_handler(
     // --- Langkah 7: Buat Cookie dan Response Sukses ---
     let cookie = Cookie::build(("jwt", token.clone()))
         .http_only(true)
-        .secure(false)
+        .secure(std::env::var("SECURE_COOKIE").unwrap_or_else(|_| "false".into()) == "true")
         .path("/")
         .max_age(Duration::hours(2))
         .build();
@@ -334,20 +338,11 @@ pub async fn update_role_handler(
         }
     };
 
-    // 🔑 Ambil secret dari .env
-    let secret = std::env
-        ::var("JWT_SECRET")
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET tidak diset".into()))?;
-
-    // 🧾 Verifikasi token
-    let token_data = decode::<Claims>(
-        &token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::default()
-    ).map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".into()))?;
+    // 🧾 Verifikasi token dan cek role
+    let claims = verify_jwt(&token).map_err(|(s, m)| (s, m))?;
 
     // 🕵️‍♀️ Cek role user dari token
-    if token_data.claims.role != "admin" {
+    if claims.role != "admin" {
         return Err((StatusCode::FORBIDDEN, "Kamu bukan admin, gak boleh ubah role!".into()));
     }
 

@@ -1,16 +1,8 @@
 use axum::extract::FromRequestParts;
 use axum::http::{ request::Parts, StatusCode };
 use axum_extra::extract::cookie::CookieJar; // <--- ini penting
-use jsonwebtoken::{ decode, DecodingKey, Validation, Algorithm };
-use serde::{ Deserialize, Serialize };
+use crate::utils::jwt::verify_jwt;
 use std::{ env, future::Future };
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Claims {
-    pub sub: String, // email user
-    pub role: String,
-    pub exp: usize,
-}
 
 #[derive(Clone, Debug)]
 pub struct AuthUser {
@@ -33,11 +25,29 @@ impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
         // pakai async block biasa
         async move {
             // --- Ambil cookie dari header ---
+            // Prioritaskan cookie agar client yang sudah login (cookie httpOnly)
+            // tidak perlu menambahkan header Authorization pada request POST/PUT/DELETE.
+            // Debug: print Cookie header to help identify if client sent it
+            if let Some(h) = parts.headers.get("cookie") {
+                match h.to_str() {
+                    Ok(v) => eprintln!("[auth] Incoming Cookie header: {}", v),
+                    Err(_) => eprintln!("[auth] Incoming Cookie header: <non-utf8>")
+                }
+            } else {
+                eprintln!("[auth] No Cookie header present on request");
+            }
+
             let jar = CookieJar::from_headers(&parts.headers);
 
-            // Ambil token dari header Authorization dulu (kalau ada)
-            // Be a bit more tolerant: check both `Authorization` and `authorization`,
-            // accept values with or without the `Bearer ` prefix, and trim whitespace.
+            // Coba ambil token dari cookie dulu (nama cookie: `jwt` atau `token`)
+            let cookie_token = jar
+                .get("jwt")
+                .or_else(|| jar.get("token"))
+                .map(|c| c.value().to_string());
+
+            // Ambil token dari header Authorization jika cookie tidak tersedia
+            // Toleransi: cek `Authorization`/`authorization`, terima nilai dengan atau tanpa
+            // prefix `Bearer ` dan trim whitespace.
             let header_token = parts.headers
                 .get("authorization")
                 .or_else(|| parts.headers.get("Authorization"))
@@ -52,11 +62,8 @@ impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
                     }
                 });
 
-            // Kalau gak ada, coba ambil dari cookie "jwt"
-            let cookie_token = jar.get("jwt").map(|c| c.value().to_string());
-
-            // Pilih salah satu token yang ketemu
-            let token = header_token.or(cookie_token);
+            // Pilih token yang ketemu: prefer cookie, lalu header
+            let token = cookie_token.or(header_token);
 
             let token = match token {
                 Some(t) if !t.is_empty() => t,
@@ -66,17 +73,11 @@ impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
             };
 
             // --- Verifikasi token ---
-            let secret = env::var("JWT_SECRET").unwrap_or_else(|_| "secret".to_string());
-
-            let token_data = decode::<Claims>(
-                &token,
-                &DecodingKey::from_secret(secret.as_bytes()),
-                &Validation::new(Algorithm::HS256)
-            ).map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".to_string()))?;
+            let claims = verify_jwt(&token)?;
 
             Ok(AuthUser {
-                email: token_data.claims.sub,
-                role: token_data.claims.role,
+                email: claims.sub,
+                role: claims.role,
             })
         }
     }
@@ -98,33 +99,37 @@ impl<S> FromRequestParts<S>
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
         async move {
             // 1. Pertama: coba ambil JWT dari cookie 'jwt' jika tersedia
+            // Debug: log Cookie header for AdminAuth path as well
+            if let Some(h) = parts.headers.get("cookie") {
+                match h.to_str() {
+                    Ok(v) => eprintln!("[admin_auth] Incoming Cookie header: {}", v),
+                    Err(_) => eprintln!("[admin_auth] Incoming Cookie header: <non-utf8>")
+                }
+            } else {
+                eprintln!("[admin_auth] No Cookie header present on request");
+            }
+
             let jar = CookieJar::from_headers(&parts.headers);
 
-            if let Some(cookie) = jar.get("jwt") {
+            if let Some(cookie) = jar.get("jwt").or_else(|| jar.get("token")) {
                 let token = cookie.value().to_string();
 
                 if token.is_empty() {
                     return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string()));
                 }
 
-                // Ambil secret dan verifikasi token
-                let secret = std::env::var("JWT_SECRET").unwrap_or_else(|_| "secret".to_string());
-
-                let token_data = match decode::<Claims>(
-                    &token,
-                    &DecodingKey::from_secret(secret.as_bytes()),
-                    &Validation::new(Algorithm::HS256),
-                ) {
-                    Ok(data) => data,
-                    Err(_) => return Err((StatusCode::UNAUTHORIZED, "Token tidak valid".to_string())),
+                // Verifikasi token menggunakan util pusat
+                let claims = match verify_jwt(&token) {
+                    Ok(c) => c,
+                    Err(e) => return Err(e),
                 };
 
                 // Pastikan role admin
-                if token_data.claims.role != "admin" {
+                if claims.role != "admin" {
                     return Err((StatusCode::FORBIDDEN, "Akses ditolak: Hanya administrator yang diizinkan.".to_string()));
                 }
 
-                let auth_user = AuthUser { email: token_data.claims.sub, role: token_data.claims.role };
+                let auth_user = AuthUser { email: claims.sub, role: claims.role };
                 return Ok(AdminAuth(auth_user));
             }
 

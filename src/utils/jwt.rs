@@ -1,9 +1,9 @@
 use chrono::{ Utc, Duration as ChronoDuration };
-use jsonwebtoken::{ encode, Header, EncodingKey };
+use jsonwebtoken::{ encode, decode, Header, EncodingKey, DecodingKey, Validation, Algorithm };
 use axum::http::StatusCode;
 
 // Impor Claims dari dtos karena JWT utils menggunakannya
-use crate::dtos::auth::Claims; 
+use crate::dtos::auth::Claims;
 
 // Tipe alias untuk memudahkan penanganan error
 type Result<T> = std::result::Result<T, (StatusCode, String)>;
@@ -42,4 +42,18 @@ pub fn create_jwt(sub: String, role: String, duration_hours: i64) -> Result<Stri
         &claims,
         &encoding_key
     ).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+/// Verifikasi token JWT dan kembalikan claims ter-deserialize.
+pub fn verify_jwt(token: &str) -> Result<Claims> {
+    let secret = std::env::var("JWT_SECRET")
+        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET not set".into()))?;
+
+    let token_data = decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::new(Algorithm::HS256),
+    ).map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".into()))?;
+
+    Ok(token_data.claims)
 }
