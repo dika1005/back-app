@@ -8,21 +8,24 @@ pub struct NewRodProductDto {
     pub name: String,
     pub description: String,
     pub category_id: i32, 
-    pub rod_length: String,
-    pub line_weight: String,
-    pub cast_weight: String,
-    pub action: String,
-    pub material: String,
-    pub power: String,
-    pub reel_size: String,
+    pub rod_length: String, 
+    pub line_weight: String, 
+    pub cast_weight: String, 
+    pub action: String, 
+    pub material: String, 
+    pub power: String, 
+    pub reel_size: String, 
     pub price: f64,
+    //  <--- (Tag Gambar disarankan di DTO)
+    
+    // AKTIFKAN FIELD IMAGE_URL DI DTO INPUT
+    pub image_url: Option<String>, 
 }
 
 // Data yang dikirimkan saat response Produk
-// Sesuaikan field ini agar sesuai dengan struktur tabel MySQL Anda
-#[derive(Debug, Serialize, sqlx::FromRow)] // sqlx::FromRow digunakan untuk mapping langsung dari query DB
+#[derive(Debug, Serialize, sqlx::FromRow)] 
 pub struct RodProduct {
-    pub id: i64, // BIGINT di MySQL, jadi gunakan i64
+    pub id: i64,
     pub name: String,
     pub description: String,
     pub category_id: i32,
@@ -33,7 +36,9 @@ pub struct RodProduct {
     pub material: String,
     pub power: String,
     pub reel_size: String,
-    pub price: f64, // DECIMAL(10, 2) mapped to f64
+    pub price: f64,
+    // AKTIFKAN FIELD IMAGE_URL DI STRUCT MODEL
+    pub image_url: Option<String>, 
 }
 
 // Struktur untuk detail produk dengan nama kategori (untuk GET All/Detail)
@@ -50,5 +55,7 @@ pub struct RodProductDetail {
     pub material: String,
     pub power: String,
     pub reel_size: String,
-    pub price: f64, // use f64 for price
+    pub price: f64, 
+    // AKTIFKAN FIELD IMAGE_URL DI STRUCT DETAIL
+    pub image_url: Option<String>,
 }

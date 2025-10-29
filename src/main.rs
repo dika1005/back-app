@@ -13,7 +13,8 @@ mod handlers;
 mod utils;
 mod middleware;
 
-use routes::{auth_routes::auth_routes, user_routes::user_routes, category_routes::category_routes, product_routes::product_routes};
+// IMPORT order_routes.rs untuk digunakan dalam .nest()
+use routes::{auth_routes::auth_routes, user_routes::user_routes, category_routes::category_routes, product_routes::product_routes, order_routes::order_routes};
 
 // ========================
 // Struct Global AppState
@@ -31,7 +32,6 @@ async fn main() {
     dotenv().ok();
 
     // --- 1. Koneksi Database ---
-    // Gunakan helper `db::init_db()` agar koneksi pool dikelola di satu tempat
     let db_pool = db::init_db().await;
 
     // --- 2. Shared State ---
@@ -44,6 +44,8 @@ async fn main() {
         .nest("/user", user_routes())
         .nest("/categories", category_routes())
         .nest("/products", product_routes())
+        // ✅ TAMBAH RUTE ORDER di /orders
+        .nest("/orders", order_routes()) 
         .with_state(shared_state)
         .layer(cors_layer()); // tambahkan CORS layer
 
@@ -66,7 +68,7 @@ async fn main() {
 // ========================
 
 async fn root_handler() -> &'static str {
-    "Server connected to MySQL successfully!"
+    "Server connected to MySQL successfully! Available endpoints: /auth, /user, /categories, /products, /orders."
 }
 
 // CORS Setup biar modular & bersih

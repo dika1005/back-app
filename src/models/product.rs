@@ -1,7 +1,7 @@
 // src/models/product.rs
 
-use sqlx::{MySql, Pool};
-use crate::dtos::product::{NewRodProductDto, RodProductDetail, RodProduct};
+use sqlx::{ MySql, Pool, Executor }; // Import Executor untuk find_by_id generik
+use crate::dtos::product::{ NewRodProductDto, RodProductDetail, RodProduct };
 
 // Catatan: RodProduct di sini adalah nama struct yang digunakan untuk mengelompokkan method.
 
@@ -15,8 +15,8 @@ impl RodProduct {
             ::query(
                 r#"
                 INSERT INTO products (name, description, category_id, rod_length, line_weight, cast_weight, 
-                                      action, material, power, reel_size, price)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      action, material, power, reel_size, price, image_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 "#
             )
             .bind(new_product.name)
@@ -30,6 +30,7 @@ impl RodProduct {
             .bind(new_product.power)
             .bind(new_product.reel_size)
             .bind(new_product.price)
+            .bind(new_product.image_url)
             .execute(pool).await?;
 
         Ok(result.last_insert_id())
@@ -43,10 +44,10 @@ impl RodProduct {
             ::query_as::<_, RodProductDetail>(
                 r#"
                 SELECT 
-                     p.id, p.name, p.description, 
-                     c.name as category_name, 
-                     p.rod_length, p.line_weight, p.cast_weight, p.action, p.material, p.power, p.reel_size, 
-                     p.price
+                    p.id, p.name, p.description, 
+                    c.name as category_name, 
+                    p.rod_length, p.line_weight, p.cast_weight, p.action, p.material, p.power, p.reel_size, 
+                    p.price, p.image_url
                 FROM products p
                 JOIN kategori c ON p.category_id = c.id
                 ORDER BY p.id DESC
@@ -64,10 +65,10 @@ impl RodProduct {
             ::query_as::<_, RodProductDetail>(
                 r#"
                 SELECT
-                     p.id, p.name, p.description, 
-                     c.name as category_name, 
-                     p.rod_length, p.line_weight, p.cast_weight, p.action, p.material, p.power, p.reel_size, 
-                     p.price
+                    p.id, p.name, p.description, 
+                    c.name as category_name, 
+                    p.rod_length, p.line_weight, p.cast_weight, p.action, p.material, p.power, p.reel_size, 
+                    p.price, p.image_url
                 FROM products p
                 JOIN kategori c ON p.category_id = c.id
                 WHERE p.id = ?
@@ -77,18 +78,39 @@ impl RodProduct {
             .fetch_optional(pool).await
     }
 
+    // 🌟 FUNGSI BARU: FIND BY ID (DIPERLUKAN OLEH MODEL ORDER) 🌟
+    // Menggunakan trait Executor untuk bisa menerima Pool atau &mut Transaction.
+    pub async fn find_by_id(
+        executor: impl Executor<'_, Database = MySql>,
+        id: i64
+    ) -> Result<RodProduct, sqlx::Error> {
+        sqlx
+            ::query_as::<_, RodProduct>(
+                r#"
+            SELECT id, name, description, category_id, rod_length, line_weight, cast_weight, 
+                   action, material, power, reel_size, price, image_url
+            FROM products 
+            WHERE id = ?
+            "#
+            )
+            .bind(id)
+            // fetch_one akan mengembalikan error jika tidak ditemukan, yang bisa kita tangkap
+            .fetch_one(executor).await
+    }
+
     // --- 4. UPDATE ---
+    // Diubah agar mengembalikan u64 (rows_affected) untuk cek 404 di handler
     pub async fn update(
         pool: &Pool<MySql>,
         id: i64,
         updated_product: NewRodProductDto
-    ) -> Result<(), sqlx::Error> {
-        sqlx
+    ) -> Result<u64, sqlx::Error> {
+        let result = sqlx
             ::query(
                 r#"
                 UPDATE products SET 
                     name = ?, description = ?, category_id = ?, rod_length = ?, line_weight = ?, cast_weight = ?, 
-                    action = ?, material = ?, power = ?, reel_size = ?, price = ?
+                    action = ?, material = ?, power = ?, reel_size = ?, price = ?, image_url = ?
                 WHERE id = ?
                 "#
             )
@@ -103,17 +125,16 @@ impl RodProduct {
             .bind(updated_product.power)
             .bind(updated_product.reel_size)
             .bind(updated_product.price)
+            .bind(updated_product.image_url)
             .bind(id)
             .execute(pool).await?;
-        Ok(())
+
+        Ok(result.rows_affected())
     }
 
     // --- 5. DELETE ---
     pub async fn delete(pool: &Pool<MySql>, id: i64) -> Result<u64, sqlx::Error> {
-        let result = sqlx
-            ::query("DELETE FROM products WHERE id = ?")
-            .bind(id)
-            .execute(pool).await?;
+        let result = sqlx::query("DELETE FROM products WHERE id = ?").bind(id).execute(pool).await?;
         Ok(result.rows_affected())
     }
 }
