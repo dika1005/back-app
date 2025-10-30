@@ -13,6 +13,8 @@ use crate::{
 };
 use reqwest::Client;
 use serde_json::json;
+// PERBAIKAN: Import Engine untuk mengganti base64::encode() yang deprecated
+use base64::{Engine as _, engine::general_purpose}; 
 
 // Type alias untuk Result yang konsisten
 type HandlerResult<T> = Result<T, (StatusCode, String)>;
@@ -58,8 +60,14 @@ pub async fn checkout(
             // Gunakan base URL dari .env
             let url = format!("{}/snap/v1/transactions", state.midtrans_base_url);
 
-            // Debug: tampilkan URL dan key (dengan masking)
+            // Persiapan Otentikasi Midtrans (Basic Auth: ServerKey:)
             let server_key = &state.midtrans_server_key;
+            let auth_string = format!("{}:", server_key); // Format Midtrans: ServerKey diikuti titik dua
+            
+            // PERBAIKAN: Menggunakan Engine yang tidak deprecated
+            let encoded_auth = general_purpose::STANDARD.encode(auth_string);
+
+            // Debug: tampilkan URL dan key (dengan masking)
             let masked_key = if server_key.len() > 8 {
                 format!("{}*****", &server_key[..8])
             } else {
@@ -67,18 +75,24 @@ pub async fn checkout(
             };
             eprintln!("[midtrans] URL: {}", url);
             eprintln!("[midtrans] Server key (masked): {}", masked_key);
+            eprintln!("[midtrans] Auth Header (Partial): Basic {}...", &encoded_auth[..15]);
 
-            // 🔐 Request ke Midtrans Snap API
+
+            // 🔐 Request ke Midtrans Snap API dengan header Authorization manual
             let resp = client
                 .post(&url)
-                .basic_auth(&state.midtrans_server_key, Some("")) // pakai Server Key, bukan Client
+                // Mengganti basic_auth() yang bermasalah dengan header Authorization eksplisit
+                .header("Authorization", format!("Basic {}", encoded_auth)) 
                 .json(&payload)
                 .send()
                 .await;
 
             match resp {
                 Ok(r) => {
-                    if r.status().is_success() {
+                    // PERBAIKAN E0382: Simpan status sebelum memanggil r.text()
+                    let status = r.status(); 
+                    
+                    if status.is_success() {
                         let data: serde_json::Value = r.json().await.unwrap_or_default();
                         let redirect_url =
                             data["redirect_url"].as_str().unwrap_or("").to_string();
@@ -95,10 +109,15 @@ pub async fn checkout(
                             )),
                         ))
                     } else {
-                        eprintln!("Midtrans Error: {:?}", r.text().await);
+                        // r.text().await mengambil ownership 'r'
+                        let error_body = r.text().await.unwrap_or_else(|_| "Failed to read response body".to_string());
+                        
+                        // Menggunakan variabel 'status' yang sudah disimpan
+                        eprintln!("Midtrans Error Status: {}", status);
+                        eprintln!("Midtrans Error Body: {}", error_body);
                         Err((
                             StatusCode::BAD_GATEWAY,
-                            "Gagal membuat transaksi di Midtrans.".to_string(),
+                            format!("Gagal membuat transaksi di Midtrans. Detail: {}", error_body),
                         ))
                     }
                 }

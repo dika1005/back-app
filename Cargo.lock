@@ -163,6 +163,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-extra",
+ "base64 0.21.7",
  "bcrypt",
  "bigdecimal 0.4.9",
  "chrono",

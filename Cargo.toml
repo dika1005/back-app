@@ -24,7 +24,7 @@ oauth2 = "4"
 async-trait = "0.1"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 bigdecimal = { version = "0.4", features = ["serde"] }
-
+base64 = { version = "0.21", features = ["std"] }
 
 [profile.dev]
 opt-level = 0
