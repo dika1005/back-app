@@ -1,22 +1,25 @@
-use axum::{
-    routing::{post, put},
-    Router,
-    middleware::from_fn,
-};
+use axum::{ routing::{ post, put }, Router, middleware::from_fn };
 use std::sync::Arc;
 use crate::AppState;
-use crate::handlers::order_handlers; // Import handler yang sudah dibuat
-use crate::middleware::auth::{AuthUser, AdminAuth}; // Import middleware
+use crate::handlers::order_handlers;
+use crate::middleware::auth::{ auth_user_middleware, admin_auth_middleware }; // pastikan ini sesuai nama middleware kamu
 
-// Fungsi utama yang mengembalikan Router untuk rute Order
 pub fn order_routes() -> Router<Arc<AppState>> {
     Router::new()
-        // Rute untuk melakukan checkout (membuat order baru)
-        // POST /checkout
-        .route("/checkout", post(order_handlers::checkout))
-        
-        // Rute untuk memproses pembayaran (mengubah status order)
-        // PUT /orders/:id/payment
-        // Rute ini memerlukan hak akses Admin/Sistem (AdminAuth)
-    .route("/{id}/payment", put(order_handlers::process_payment))
+        // --- 1️⃣ Checkout (User Auth) ---
+        .route(
+            "/checkout",
+            post(order_handlers::checkout).route_layer(from_fn(auth_user_middleware)) // 🔒 hanya user login
+        )
+        // --- 2️⃣ Proses Pembayaran (Admin Only) ---
+        .route(
+            "/orders/{id}/payment",
+            put(order_handlers::process_payment).route_layer(from_fn(admin_auth_middleware)) // 🔒 hanya admin
+        )
+
+        // --- 3️⃣ Webhook dari Payment Gateway ---
+        .route(
+            "/webhook/payment",
+            post(order_handlers::webhook_payment) // 🌐 tanpa middleware (dibuka untuk sistem gateway)
+        )
 }

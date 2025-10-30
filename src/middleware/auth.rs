@@ -10,6 +10,92 @@ pub struct AuthUser {
     pub role: String,
 }
 
+// --- Convenience middleware functions for route layers ---
+use axum::http::Request;
+use axum::middleware::Next;
+use axum::response::{ IntoResponse, Response };
+use axum::http::StatusCode as HttpStatusCode;
+use axum::body::Body;
+
+/// Middleware that ensures a request has a valid JWT (any role).
+/// Returns the inner response when token is valid, otherwise returns 401.
+pub async fn auth_user_middleware(mut req: Request<Body>, next: Next) -> Response {
+    // reuse cookie/header parsing logic similar to the extractors above
+    let headers = req.headers();
+    let jar = CookieJar::from_headers(headers);
+
+    let cookie_token = jar
+        .get("jwt")
+        .or_else(|| jar.get("token"))
+        .map(|c| c.value().to_string());
+
+    let header_token = headers
+        .get("authorization")
+        .or_else(|| headers.get("Authorization"))
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim())
+        .map(|v| {
+            if let Some(s) = v.strip_prefix("Bearer ") {
+                s.to_string()
+            } else {
+                v.to_string()
+            }
+        });
+
+    let token = cookie_token.or(header_token);
+
+    match token {
+        Some(t) if !t.is_empty() => {
+            match verify_jwt(&t) {
+                Ok(_) => next.run(req).await,
+                Err(_) => (HttpStatusCode::UNAUTHORIZED, "Token tidak valid".to_string()).into_response(),
+            }
+        }
+        _ => (HttpStatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string()).into_response(),
+    }
+}
+
+/// Middleware that ensures the request contains a JWT with role == "admin".
+pub async fn admin_auth_middleware(mut req: Request<Body>, next: Next) -> Response {
+    let headers = req.headers();
+    let jar = CookieJar::from_headers(headers);
+
+    let cookie_token = jar
+        .get("jwt")
+        .or_else(|| jar.get("token"))
+        .map(|c| c.value().to_string());
+
+    let header_token = headers
+        .get("authorization")
+        .or_else(|| headers.get("Authorization"))
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.trim())
+        .map(|v| {
+            if let Some(s) = v.strip_prefix("Bearer ") {
+                s.to_string()
+            } else {
+                v.to_string()
+            }
+        });
+
+    let token = cookie_token.or(header_token);
+
+    match token {
+        Some(t) if !t.is_empty() => {
+            match verify_jwt(&t) {
+                Ok(claims) => {
+                    if claims.role != "admin" {
+                        return (HttpStatusCode::FORBIDDEN, "Akses ditolak: Hanya administrator yang diizinkan.".to_string()).into_response();
+                    }
+                    next.run(req).await
+                }
+                Err(_) => (HttpStatusCode::UNAUTHORIZED, "Token tidak valid".to_string()).into_response(),
+            }
+        }
+        _ => (HttpStatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string()).into_response(),
+    }
+}
+
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
 pub struct AdminAuth(pub AuthUser); // Wrapper untuk AuthUser

@@ -3,7 +3,6 @@ use axum::{ extract::{ State, Query, Path }, response::IntoResponse, http::Statu
 use bcrypt::{ verify, hash, DEFAULT_COST };
 use serde_json::Value;
 use std::{ collections::HashMap, sync::Arc };
-// use jsonwebtoken::{ Validation, decode, DecodingKey };
 use axum_extra::extract::cookie::{ Cookie, CookieJar };
 use time::Duration;
 use serde_json::json;
