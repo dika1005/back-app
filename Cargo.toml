@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 axum = { version = "0.8", features = ["macros", "query", "json"] }
 tokio = { version = "1.43", features = ["full"] }
-sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "macros", "bigdecimal"] }
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "mysql", "macros", "bigdecimal", "chrono"] }
 dotenvy = "0.15"
 
 tower-http = { version = "0.5", features = ["cors"] }

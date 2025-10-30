@@ -1,4 +1,4 @@
-use axum::{Router, routing::get, serve};
+use axum::{Router, routing::{get, post, put}, serve};
 use dotenvy::dotenv;
 use sqlx::{MySql, Pool};
 use std::{env, net::SocketAddr, sync::Arc};
@@ -13,8 +13,9 @@ mod handlers;
 mod utils;
 mod middleware;
 
-// IMPORT order_routes.rs untuk digunakan dalam .nest()
+// IMPORT SEMUA RUTE DAN HANDLER WEBHOOK
 use routes::{auth_routes::auth_routes, user_routes::user_routes, category_routes::category_routes, product_routes::product_routes, order_routes::order_routes};
+use handlers::order_handlers::webhook_payment; // <<< IMPORT HANDLER WEBHOOK DARI SINI >>>
 
 // ========================
 // Struct Global AppState
@@ -22,8 +23,6 @@ use routes::{auth_routes::auth_routes, user_routes::user_routes, category_routes
 #[derive(Clone)]
 pub struct AppState {
     pub db: Pool<MySql>,
-
-    // 🧩 Tambahan konfigurasi Midtrans
     pub midtrans_server_key: String,
     pub midtrans_client_key: String,
     pub midtrans_base_url: String,
@@ -35,20 +34,17 @@ pub struct AppState {
 #[tokio::main]
 async fn main() {
     dotenv().ok();
-
+    
     // --- 1. Koneksi Database ---
     let db_pool = db::init_db().await;
-
+    
     // 🧩 2. Ambil variabel Midtrans dari .env
     let midtrans_server_key = env::var("MIDTRANS_SERVER_KEY").expect("MIDTRANS_SERVER_KEY belum diset di .env");
     let midtrans_client_key = env::var("MIDTRANS_CLIENT_KEY").expect("MIDTRANS_CLIENT_KEY belum diset di .env");
-    // Default to the Midtrans API sandbox host (not the web app URL)
     let midtrans_base_url = env::var("MIDTRANS_BASE_URL").unwrap_or_else(|_| "https://api.sandbox.midtrans.com".to_string());
-
+    
     let shared_state = Arc::new(AppState {
         db: db_pool,
-
-        // 🧩 Tambahan Midtrans keys
         midtrans_server_key,
         midtrans_client_key,
         midtrans_base_url,
@@ -60,7 +56,14 @@ async fn main() {
         .nest("/user", user_routes())
         .nest("/categories", category_routes())
         .nest("/products", product_routes())
+        
+        // --- DAFTAR RUTE TRANSAKSI (Membutuhkan Awalan /orders) ---
         .nest("/orders", order_routes()) 
+        
+        // <<< SOLUSI UNTUK 404 WEBHOOK >>>
+        // Rute ini HARUS berada di root ("/") agar alamatnya menjadi POST /webhook/payment
+        .route("/webhook/payment", post(webhook_payment))
+        
         .with_state(shared_state)
         .layer(cors_layer()); // tambahkan CORS layer
 
