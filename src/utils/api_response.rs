@@ -30,8 +30,6 @@ impl<T: Serialize> ApiResponse<T> {
         }
     }
     
-    // success_data_with_message (digunakan untuk POST Create, data + pesan)
-    // Tipe argumen disesuaikan dengan handler Anda: (msg: String, data: T)
     pub fn success_data_with_message(msg: String, data: T) -> Self {
         Self {
             status: "success".to_string(),

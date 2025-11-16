@@ -6,7 +6,8 @@ use crate::handlers::auth_handlers::{
     logout_handler,
     google_auth_handler,
     google_callback_handler,
-    update_role_handler
+    update_role_handler,
+    refresh_handler
 };
 use crate::AppState;
 
@@ -18,4 +19,5 @@ pub fn auth_routes() -> Router<Arc<AppState>> {
         .route("/google", get(google_auth_handler)) // Redirect ke Google
         .route("/google/callback", get(google_callback_handler)) // Callback dari Google
        .route("/update-role/{email}", post(update_role_handler))
+         .route("/refresh", post(refresh_handler))
 }
