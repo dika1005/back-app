@@ -1,5 +1,3 @@
-// src/handlers/category_handlers.rs (FINAL RBAC IMPLEMENTATION)
-
 use axum::{ extract::{ Path, State, Json }, response::IntoResponse, http::StatusCode };
 use std::sync::Arc;
 use crate::AppState;
