@@ -1,7 +1,6 @@
-use sqlx::{ MySql, Pool, Transaction };
-use crate::dtos::order::{ NewOrderDto, Order, OrderItem }; // Order adalah struct utama
+use sqlx::{ MySql, Pool };
+use crate::dtos::order::{ NewOrderDto, Order };
 use crate::dtos::product::RodProduct;
-use crate::middleware::auth::AuthUser;
 
 // Catatan: Asumsi RodProduct::find_by_id sudah ada dan menerima &mut Transaction
 

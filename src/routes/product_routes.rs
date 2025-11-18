@@ -1,4 +1,4 @@
-use axum::{Router, routing::{get, post, put}};
+use axum::{Router, routing::get};
 use crate::handlers::product_handlers::{
     create_product,
     get_all_products,

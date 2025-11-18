@@ -1,4 +1,4 @@
-use axum::{extract::State, response::IntoResponse, Json, http::StatusCode};
+use axum::{extract::State, Json, http::StatusCode};
 use axum_extra::extract::cookie::CookieJar;
 use std::sync::Arc;
 use crate::AppState;

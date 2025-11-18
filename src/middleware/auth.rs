@@ -2,7 +2,7 @@ use axum::extract::FromRequestParts;
 use axum::http::{ request::Parts, StatusCode };
 use axum_extra::extract::cookie::CookieJar; // <--- ini penting
 use crate::utils::jwt::verify_jwt;
-use std::{ env, future::Future };
+use std::future::Future;
 
 #[derive(Clone, Debug)]
 pub struct AuthUser {
@@ -19,7 +19,7 @@ use axum::body::Body;
 
 /// Middleware that ensures a request has a valid JWT (any role).
 /// Returns the inner response when token is valid, otherwise returns 401.
-pub async fn auth_user_middleware(mut req: Request<Body>, next: Next) -> Response {
+pub async fn auth_user_middleware(req: Request<Body>, next: Next) -> Response {
     // reuse cookie/header parsing logic similar to the extractors above
     let headers = req.headers();
     let jar = CookieJar::from_headers(headers);
@@ -56,7 +56,7 @@ pub async fn auth_user_middleware(mut req: Request<Body>, next: Next) -> Respons
 }
 
 /// Middleware that ensures the request contains a JWT with role == "admin".
-pub async fn admin_auth_middleware(mut req: Request<Body>, next: Next) -> Response {
+pub async fn admin_auth_middleware(req: Request<Body>, next: Next) -> Response {
     let headers = req.headers();
     let jar = CookieJar::from_headers(headers);
 

@@ -1,8 +1,8 @@
 use reqwest::Client;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use crate::AppState;
 
+#[allow(dead_code)]
 pub async fn create_midtrans_transaction(
     state: &AppState,
     order_id: &str,

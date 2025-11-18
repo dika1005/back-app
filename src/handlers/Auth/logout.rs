@@ -2,7 +2,6 @@ use axum::{extract::State, response::IntoResponse, Json};
 use axum_extra::extract::cookie::{CookieJar, Cookie};
 use std::sync::Arc;
 use time::Duration;
-use chrono::Utc;
 use sqlx::Row;
 use crate::AppState;
 use crate::utils::jwt::verify_jwt;

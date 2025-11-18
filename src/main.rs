@@ -1,4 +1,4 @@
-use axum::{Router, routing::{get, post, put}, serve};
+use axum::{Router, routing::{get, post}, serve};
 use dotenvy::dotenv;
 use sqlx::{MySql, Pool};
 use std::{env, net::SocketAddr, sync::Arc};
@@ -15,7 +15,7 @@ mod middleware;
 
 // IMPORT SEMUA RUTE DAN HANDLER WEBHOOK
 use routes::{auth_routes::auth_routes, user_routes::user_routes, category_routes::category_routes, product_routes::product_routes, order_routes::order_routes};
-use handlers::order_handlers::webhook_payment; // <<< IMPORT HANDLER WEBHOOK DARI SINI >>>
+use crate::handlers::order::webhook::webhook_payment; // <<< IMPORT HANDLER WEBHOOK DARI SINI >>>
 
 // ========================
 // Struct Global AppState
@@ -50,20 +50,14 @@ async fn main() {
         midtrans_base_url,
     });
 
-    let app = Router::new()
+    let app = Router::<Arc<AppState>>::new()
         .route("/", get(root_handler))
         .nest("/auth", auth_routes())
         .nest("/user", user_routes())
         .nest("/categories", category_routes())
         .nest("/products", product_routes())
-        
-        // --- DAFTAR RUTE TRANSAKSI (Membutuhkan Awalan /orders) ---
-        .nest("/orders", order_routes()) 
-        
-        // <<< SOLUSI UNTUK 404 WEBHOOK >>>
-        // Rute ini HARUS berada di root ("/") agar alamatnya menjadi POST /webhook/payment
+        .nest("/orders", order_routes())
         .route("/webhook/payment", post(webhook_payment))
-        
         .with_state(shared_state)
         .layer(cors_layer()); // tambahkan CORS layer
 

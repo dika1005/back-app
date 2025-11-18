@@ -1,4 +1,4 @@
-use axum::{Router, routing::{post, get}};
+use axum::{Router, routing::{post, get}, middleware::from_fn};
 use std::sync::Arc;
 use crate::handlers::auth::{
     register::register_handler,
@@ -8,6 +8,7 @@ use crate::handlers::auth::{
     update_role::update_role_handler,
     refresh::refresh_handler,
 };
+use crate::middleware::auth::{ admin_auth_middleware };
 use crate::AppState;
 
 pub fn auth_routes() -> Router<Arc<AppState>> {
@@ -18,5 +19,5 @@ pub fn auth_routes() -> Router<Arc<AppState>> {
         .route("/google", get(google_auth_handler))
         .route("/google/callback", get(google_callback_handler))
         .route("/update-role/{email}", post(update_role_handler))
-        .route("/refresh", post(refresh_handler))
+        .route("/refresh", post(refresh_handler)).route_layer(from_fn(admin_auth_middleware))
 }

@@ -8,8 +8,7 @@ use crate::AppState;
 use crate::models::user::User;
 use crate::dtos::auth::{LoginRequest, LoginResponse, UserLoginData};
 use crate::utils::jwt::{create_jwt, create_refresh_token};
-use sqlx::Row;
-use serde_json::json;
+// removed unused imports: sqlx::Row, serde_json::json
 use axum_extra::extract::cookie::Cookie;
 
 pub async fn login_handler(

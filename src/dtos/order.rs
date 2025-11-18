@@ -16,6 +16,7 @@ pub struct NewOrderDto {
     pub payment_method: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, FromRow)]
 pub struct Order {
     pub id: i64,
