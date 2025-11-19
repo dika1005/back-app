@@ -1,6 +1,9 @@
-use axum::{Router, routing::{get, put}};
-use crate::handlers::user::profile::{get_profile, update_profile};
 use crate::AppState;
+use crate::handlers::user::profile::{get_profile, update_profile};
+use axum::{
+    Router,
+    routing::{get, put},
+};
 use std::sync::Arc;
 
 pub fn user_routes() -> Router<Arc<AppState>> {

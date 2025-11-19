@@ -1,9 +1,9 @@
-use axum::{extract::State, response::IntoResponse, Json, http::StatusCode};
-use bcrypt::{hash, DEFAULT_COST};
-use std::sync::Arc;
 use crate::AppState;
-use crate::models::user::User;
 use crate::dtos::auth::{RegisterRequest, RegisterResponse, UserData};
+use crate::models::user::User;
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use bcrypt::{DEFAULT_COST, hash};
+use std::sync::Arc;
 
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,

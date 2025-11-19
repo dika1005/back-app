@@ -29,7 +29,7 @@ impl<T: Serialize> ApiResponse<T> {
             data: Some(data),
         }
     }
-    
+
     pub fn success_data_with_message(msg: String, data: T) -> Self {
         Self {
             status: "success".to_string(),
@@ -37,7 +37,7 @@ impl<T: Serialize> ApiResponse<T> {
             data: Some(data),
         }
     }
-    
+
     // error (generic error helper)
     fn error_base(msg: &str) -> ApiResponse<()> {
         ApiResponse {

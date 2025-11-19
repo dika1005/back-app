@@ -1,26 +1,25 @@
 use axum::{
-    extract::{State, Json},
-    response::IntoResponse,
+    extract::{Json, State},
     http::StatusCode,
+    response::IntoResponse,
 };
 use std::sync::Arc;
 // removed unused import: serde_json::json
-use crate::{
-    AppState,
-    utils::ApiResponse,
-    dtos::order::Order,
-};
+use crate::{AppState, dtos::order::Order, utils::ApiResponse};
 
 type HandlerResult<T> = Result<T, (StatusCode, String)>;
 
 fn internal_server_error(e: sqlx::Error) -> (StatusCode, String) {
     eprintln!("Database Error: {}", e);
-    (StatusCode::INTERNAL_SERVER_ERROR, "Terjadi kesalahan internal pada server.".to_string())
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Terjadi kesalahan internal pada server.".to_string(),
+    )
 }
 
 pub async fn webhook_payment(
     State(state): State<Arc<AppState>>,
-    Json(payload): Json<serde_json::Value>
+    Json(payload): Json<serde_json::Value>,
 ) -> HandlerResult<impl IntoResponse> {
     let order_id = match payload["order_id"].as_str() {
         Some(s) => s.parse::<i64>().unwrap_or(-1),
@@ -35,18 +34,31 @@ pub async fn webhook_payment(
     }
 
     eprintln!("[Webhook] Menerima notifikasi untuk Order ID: {}", order_id);
-    eprintln!("[Webhook] Status Transaksi Midtrans: {}", transaction_status);
+    eprintln!(
+        "[Webhook] Status Transaksi Midtrans: {}",
+        transaction_status
+    );
 
     match Order::process_payment(&state.db, order_id, is_success).await {
         Ok(rows_affected) => {
             if rows_affected > 0 {
                 Ok((
                     StatusCode::OK,
-                    Json(ApiResponse::<()>::success(&format!("Webhook: Order {} diperbarui menjadi {}", order_id, if is_success { "PAID" } else { "FAILED" }))),
+                    Json(ApiResponse::<()>::success(&format!(
+                        "Webhook: Order {} diperbarui menjadi {}",
+                        order_id,
+                        if is_success { "PAID" } else { "FAILED" }
+                    ))),
                 ))
             } else {
-                eprintln!("[Webhook] Order {} tidak ditemukan atau sudah diproses (Status tidak diubah). Mengembalikan 200 OK.", order_id);
-                Ok((StatusCode::OK, Json(ApiResponse::<()>::success("Order sudah diproses."))))
+                eprintln!(
+                    "[Webhook] Order {} tidak ditemukan atau sudah diproses (Status tidak diubah). Mengembalikan 200 OK.",
+                    order_id
+                );
+                Ok((
+                    StatusCode::OK,
+                    Json(ApiResponse::<()>::success("Order sudah diproses.")),
+                ))
             }
         }
         Err(e) => Err(internal_server_error(e)),

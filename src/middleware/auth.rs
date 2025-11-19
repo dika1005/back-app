@@ -1,7 +1,7 @@
-use axum::extract::FromRequestParts;
-use axum::http::{ request::Parts, StatusCode };
-use axum_extra::extract::cookie::CookieJar; // <--- ini penting
 use crate::utils::jwt::verify_jwt;
+use axum::extract::FromRequestParts;
+use axum::http::{StatusCode, request::Parts};
+use axum_extra::extract::cookie::CookieJar; // <--- ini penting
 use std::future::Future;
 
 #[derive(Clone, Debug)]
@@ -11,11 +11,11 @@ pub struct AuthUser {
 }
 
 // --- Convenience middleware functions for route layers ---
-use axum::http::Request;
-use axum::middleware::Next;
-use axum::response::{ IntoResponse, Response };
-use axum::http::StatusCode as HttpStatusCode;
 use axum::body::Body;
+use axum::http::Request;
+use axum::http::StatusCode as HttpStatusCode;
+use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 
 /// Middleware that ensures a request has a valid JWT (any role).
 /// Returns the inner response when token is valid, otherwise returns 401.
@@ -45,13 +45,19 @@ pub async fn auth_user_middleware(req: Request<Body>, next: Next) -> Response {
     let token = cookie_token.or(header_token);
 
     match token {
-        Some(t) if !t.is_empty() => {
-            match verify_jwt(&t) {
-                Ok(_) => next.run(req).await,
-                Err(_) => (HttpStatusCode::UNAUTHORIZED, "Token tidak valid".to_string()).into_response(),
-            }
-        }
-        _ => (HttpStatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string()).into_response(),
+        Some(t) if !t.is_empty() => match verify_jwt(&t) {
+            Ok(_) => next.run(req).await,
+            Err(_) => (
+                HttpStatusCode::UNAUTHORIZED,
+                "Token tidak valid".to_string(),
+            )
+                .into_response(),
+        },
+        _ => (
+            HttpStatusCode::UNAUTHORIZED,
+            "Token tidak ditemukan".to_string(),
+        )
+            .into_response(),
     }
 }
 
@@ -81,18 +87,28 @@ pub async fn admin_auth_middleware(req: Request<Body>, next: Next) -> Response {
     let token = cookie_token.or(header_token);
 
     match token {
-        Some(t) if !t.is_empty() => {
-            match verify_jwt(&t) {
-                Ok(claims) => {
-                    if claims.role != "admin" {
-                        return (HttpStatusCode::FORBIDDEN, "Akses ditolak: Hanya administrator yang diizinkan.".to_string()).into_response();
-                    }
-                    next.run(req).await
+        Some(t) if !t.is_empty() => match verify_jwt(&t) {
+            Ok(claims) => {
+                if claims.role != "admin" {
+                    return (
+                        HttpStatusCode::FORBIDDEN,
+                        "Akses ditolak: Hanya administrator yang diizinkan.".to_string(),
+                    )
+                        .into_response();
                 }
-                Err(_) => (HttpStatusCode::UNAUTHORIZED, "Token tidak valid".to_string()).into_response(),
+                next.run(req).await
             }
-        }
-        _ => (HttpStatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string()).into_response(),
+            Err(_) => (
+                HttpStatusCode::UNAUTHORIZED,
+                "Token tidak valid".to_string(),
+            )
+                .into_response(),
+        },
+        _ => (
+            HttpStatusCode::UNAUTHORIZED,
+            "Token tidak ditemukan".to_string(),
+        )
+            .into_response(),
     }
 }
 
@@ -101,12 +117,15 @@ pub async fn admin_auth_middleware(req: Request<Body>, next: Next) -> Response {
 pub struct AdminAuth(pub AuthUser); // Wrapper untuk AuthUser
 
 #[allow(refining_impl_trait)]
-impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
     type Rejection = (StatusCode, String);
 
     fn from_request_parts(
         parts: &mut Parts,
-        _state: &S
+        _state: &S,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
         // pakai async block biasa
         async move {
@@ -117,7 +136,7 @@ impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
             if let Some(h) = parts.headers.get("cookie") {
                 match h.to_str() {
                     Ok(v) => eprintln!("[auth] Incoming Cookie header: {}", v),
-                    Err(_) => eprintln!("[auth] Incoming Cookie header: <non-utf8>")
+                    Err(_) => eprintln!("[auth] Incoming Cookie header: <non-utf8>"),
                 }
             } else {
                 eprintln!("[auth] No Cookie header present on request");
@@ -134,7 +153,8 @@ impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
             // Ambil token dari header Authorization jika cookie tidak tersedia
             // Toleransi: cek `Authorization`/`authorization`, terima nilai dengan atau tanpa
             // prefix `Bearer ` dan trim whitespace.
-            let header_token = parts.headers
+            let header_token = parts
+                .headers
                 .get("authorization")
                 .or_else(|| parts.headers.get("Authorization"))
                 .and_then(|v| v.to_str().ok())
@@ -154,7 +174,10 @@ impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
             let token = match token {
                 Some(t) if !t.is_empty() => t,
                 _ => {
-                    return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string()));
+                    return Err((
+                        StatusCode::UNAUTHORIZED,
+                        "Token tidak ditemukan".to_string(),
+                    ));
                 }
             };
 
@@ -170,18 +193,17 @@ impl<S> FromRequestParts<S> for AuthUser where S: Send + Sync {
 }
 
 #[allow(refining_impl_trait)]
-impl<S> FromRequestParts<S>
-    for AdminAuth
-    where
-        S: Send + Sync,
-        // Memastikan AuthUser sudah berhasil diekstrak
-        AuthUser: FromRequestParts<S, Rejection = (StatusCode, String)>
+impl<S> FromRequestParts<S> for AdminAuth
+where
+    S: Send + Sync,
+    // Memastikan AuthUser sudah berhasil diekstrak
+    AuthUser: FromRequestParts<S, Rejection = (StatusCode, String)>,
 {
     type Rejection = (StatusCode, String);
 
     fn from_request_parts(
         parts: &mut Parts,
-        state: &S
+        state: &S,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
         async move {
             // 1. Pertama: coba ambil JWT dari cookie 'jwt' jika tersedia
@@ -189,7 +211,7 @@ impl<S> FromRequestParts<S>
             if let Some(h) = parts.headers.get("cookie") {
                 match h.to_str() {
                     Ok(v) => eprintln!("[admin_auth] Incoming Cookie header: {}", v),
-                    Err(_) => eprintln!("[admin_auth] Incoming Cookie header: <non-utf8>")
+                    Err(_) => eprintln!("[admin_auth] Incoming Cookie header: <non-utf8>"),
                 }
             } else {
                 eprintln!("[admin_auth] No Cookie header present on request");
@@ -201,7 +223,10 @@ impl<S> FromRequestParts<S>
                 let token = cookie.value().to_string();
 
                 if token.is_empty() {
-                    return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".to_string()));
+                    return Err((
+                        StatusCode::UNAUTHORIZED,
+                        "Token tidak ditemukan".to_string(),
+                    ));
                 }
 
                 // Verifikasi token menggunakan util pusat
@@ -212,10 +237,16 @@ impl<S> FromRequestParts<S>
 
                 // Pastikan role admin
                 if claims.role != "admin" {
-                    return Err((StatusCode::FORBIDDEN, "Akses ditolak: Hanya administrator yang diizinkan.".to_string()));
+                    return Err((
+                        StatusCode::FORBIDDEN,
+                        "Akses ditolak: Hanya administrator yang diizinkan.".to_string(),
+                    ));
                 }
 
-                let auth_user = AuthUser { email: claims.sub, role: claims.role };
+                let auth_user = AuthUser {
+                    email: claims.sub,
+                    role: claims.role,
+                };
                 return Ok(AdminAuth(auth_user));
             }
 
@@ -223,7 +254,10 @@ impl<S> FromRequestParts<S>
             let auth_user = AuthUser::from_request_parts(parts, state).await?;
 
             if auth_user.role != "admin" {
-                return Err((StatusCode::FORBIDDEN, "Akses ditolak: Hanya administrator yang diizinkan.".to_string()));
+                return Err((
+                    StatusCode::FORBIDDEN,
+                    "Akses ditolak: Hanya administrator yang diizinkan.".to_string(),
+                ));
             }
 
             Ok(AdminAuth(auth_user))

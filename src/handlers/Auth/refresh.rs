@@ -1,11 +1,11 @@
-use axum::{extract::State, Json, http::StatusCode};
-use axum_extra::extract::cookie::CookieJar;
-use std::sync::Arc;
 use crate::AppState;
-use crate::utils::jwt::{verify_refresh_token, create_jwt, create_refresh_token};
-use sqlx::Row;
-use chrono::{Utc, Duration as ChronoDuration};
+use crate::utils::jwt::{create_jwt, create_refresh_token, verify_refresh_token};
+use axum::{Json, extract::State, http::StatusCode};
+use axum_extra::extract::cookie::CookieJar;
+use chrono::{Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
+use std::sync::Arc;
 
 #[derive(Deserialize)]
 pub struct RefreshRequest {
@@ -33,7 +33,10 @@ pub async fn refresh_handler(
 
     let claims = verify_refresh_token(&refresh_token).map_err(|e| e)?;
 
-    let user_id: i64 = claims.sub.parse().map_err(|_| (StatusCode::UNAUTHORIZED, "invalid subject in token".into()))?;
+    let user_id: i64 = claims
+        .sub
+        .parse()
+        .map_err(|_| (StatusCode::UNAUTHORIZED, "invalid subject in token".into()))?;
 
     let row = sqlx::query("SELECT id, revoked, expires_at FROM refresh_tokens WHERE token = ?")
         .bind(&refresh_token)
@@ -46,8 +49,12 @@ pub async fn refresh_handler(
         None => return Err((StatusCode::UNAUTHORIZED, "refresh token not found".into())),
     };
 
-    let revoked: bool = rec.try_get("revoked").map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let expires_at: chrono::NaiveDateTime = rec.try_get("expires_at").map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let revoked: bool = rec
+        .try_get("revoked")
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let expires_at: chrono::NaiveDateTime = rec
+        .try_get("expires_at")
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if revoked {
         return Err((StatusCode::UNAUTHORIZED, "refresh token revoked".into()));
@@ -56,7 +63,11 @@ pub async fn refresh_handler(
         return Err((StatusCode::UNAUTHORIZED, "refresh token expired".into()));
     }
 
-    let mut tx = state.db.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut tx = state
+        .db
+        .begin()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE token = ?")
         .bind(&refresh_token)
@@ -79,16 +90,23 @@ pub async fn refresh_handler(
     let refresh = create_refresh_token(user_id.to_string(), 5).map_err(|e| e)?;
     let new_expires_at = Utc::now().naive_utc() + ChronoDuration::days(5);
 
-    sqlx::query("INSERT INTO refresh_tokens (user_id, token, revoked, expires_at) VALUES (?, ?, false, ?)")
-        .bind(user_id)
-        .bind(&refresh)
-        .bind(new_expires_at)
-        .execute(&mut *tx)
+    sqlx::query(
+        "INSERT INTO refresh_tokens (user_id, token, revoked, expires_at) VALUES (?, ?, false, ?)",
+    )
+    .bind(user_id)
+    .bind(&refresh)
+    .bind(new_expires_at)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    tx.commit()
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    let resp = TokenResponse { access_token: access, refresh_token: refresh };
+    let resp = TokenResponse {
+        access_token: access,
+        refresh_token: refresh,
+    };
     Ok((StatusCode::OK, Json(resp)))
 }

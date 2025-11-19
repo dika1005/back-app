@@ -1,11 +1,11 @@
-use axum::{extract::State, response::IntoResponse, Json};
-use axum_extra::extract::cookie::{CookieJar, Cookie};
-use std::sync::Arc;
-use time::Duration;
-use sqlx::Row;
 use crate::AppState;
 use crate::utils::jwt::verify_jwt;
+use axum::{Json, extract::State, response::IntoResponse};
+use axum_extra::extract::cookie::{Cookie, CookieJar};
 use serde_json::json;
+use sqlx::Row;
+use std::sync::Arc;
+use time::Duration;
 
 pub async fn logout_handler(
     State(state): State<Arc<AppState>>,
@@ -21,12 +21,16 @@ pub async fn logout_handler(
                 .await
             {
                 if let Ok(user_id) = row.try_get::<i64, _>("id") {
-                    if let Err(e) = sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE user_id = ?")
-                        .bind(user_id)
-                        .execute(&state.db)
-                        .await
+                    if let Err(e) =
+                        sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE user_id = ?")
+                            .bind(user_id)
+                            .execute(&state.db)
+                            .await
                     {
-                        eprintln!("Failed to revoke refresh tokens for user {}: {:?}", user_id, e);
+                        eprintln!(
+                            "Failed to revoke refresh tokens for user {}: {:?}",
+                            user_id, e
+                        );
                     }
                 }
             }
@@ -49,8 +53,11 @@ pub async fn logout_handler(
 
     let jar = jar.add(cookie).add(refresh_del);
 
-    (jar, Json(json!({
-        "status": "success",
-        "message": "Logout berhasil!"
-    })))
+    (
+        jar,
+        Json(json!({
+            "status": "success",
+            "message": "Logout berhasil!"
+        })),
+    )
 }

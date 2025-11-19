@@ -1,6 +1,6 @@
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use chrono::NaiveDateTime;
 use sqlx::types::BigDecimal;
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,32 +1,32 @@
-use axum::{
-    extract::{State, Json},
-    response::IntoResponse,
-    http::StatusCode,
+use crate::{
+    AppState, dtos::order::NewOrderDto, middleware::auth::AuthUser, models::user::User,
+    utils::ApiResponse,
 };
-use std::sync::Arc;
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use base64::Engine;
+use base64::engine::general_purpose;
 use reqwest::Client;
 use serde_json::json;
-use base64::{ engine::general_purpose };
-use base64::Engine;
-use crate::{
-    AppState,
-    utils::ApiResponse,
-    dtos::order::NewOrderDto,
-    models::user::User,
-    middleware::auth::AuthUser,
-};
+use std::sync::Arc;
 
 type HandlerResult<T> = Result<T, (StatusCode, String)>;
 
 fn internal_server_error(e: sqlx::Error) -> (StatusCode, String) {
     eprintln!("Database Error: {}", e);
-    (StatusCode::INTERNAL_SERVER_ERROR, "Terjadi kesalahan internal pada server.".to_string())
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Terjadi kesalahan internal pada server.".to_string(),
+    )
 }
 
 pub async fn checkout(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,
-    Json(new_order_dto): Json<NewOrderDto>
+    Json(new_order_dto): Json<NewOrderDto>,
 ) -> HandlerResult<impl IntoResponse> {
     let user_record = match User::find_by_email(&state.db, &auth_user.email).await {
         Ok(Some(u)) => u,
@@ -41,7 +41,7 @@ pub async fn checkout(
             let payload = json!({
                 "transaction_details": {
                     "order_id": order_id.to_string(),
-                    "gross_amount": 100000 
+                    "gross_amount": 100000
                 },
                 "customer_details": {
                     "first_name": user_record.name,
@@ -62,13 +62,17 @@ pub async fn checkout(
             };
             eprintln!("[midtrans] URL: {}", url);
             eprintln!("[midtrans] Server key (masked): {}", masked_key);
-            eprintln!("[midtrans] Auth Header (Partial): Basic {}...", &encoded_auth[..15]);
+            eprintln!(
+                "[midtrans] Auth Header (Partial): Basic {}...",
+                &encoded_auth[..15]
+            );
 
             let resp = client
                 .post(&url)
                 .header("Authorization", format!("Basic {}", encoded_auth))
                 .json(&payload)
-                .send().await;
+                .send()
+                .await;
 
             match resp {
                 Ok(r) => {
@@ -81,23 +85,33 @@ pub async fn checkout(
                         Ok((
                             StatusCode::CREATED,
                             Json(ApiResponse::success_data_with_message(
-                                "Checkout berhasil. Silakan lanjutkan pembayaran melalui Midtrans.".to_string(),
-                                json!({ "order_id": order_id, "payment_url": redirect_url })
+                                "Checkout berhasil. Silakan lanjutkan pembayaran melalui Midtrans."
+                                    .to_string(),
+                                json!({ "order_id": order_id, "payment_url": redirect_url }),
                             )),
                         ))
                     } else {
-                        let error_body = r.text().await.unwrap_or_else(|_| "Failed to read response body".to_string());
+                        let error_body = r
+                            .text()
+                            .await
+                            .unwrap_or_else(|_| "Failed to read response body".to_string());
                         eprintln!("Midtrans Error Status: {}", status);
                         eprintln!("Midtrans Error Body: {}", error_body);
                         Err((
                             StatusCode::BAD_GATEWAY,
-                            format!("Gagal membuat transaksi di Midtrans. Detail: {}", error_body),
+                            format!(
+                                "Gagal membuat transaksi di Midtrans. Detail: {}",
+                                error_body
+                            ),
                         ))
                     }
                 }
                 Err(e) => {
                     eprintln!("Midtrans Request Error: {}", e);
-                    Err((StatusCode::BAD_GATEWAY, "Tidak dapat terhubung ke Midtrans.".to_string()))
+                    Err((
+                        StatusCode::BAD_GATEWAY,
+                        "Tidak dapat terhubung ke Midtrans.".to_string(),
+                    ))
                 }
             }
         }

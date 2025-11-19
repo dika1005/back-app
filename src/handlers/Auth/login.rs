@@ -1,13 +1,13 @@
-use axum::{extract::State, response::IntoResponse, Json, http::StatusCode};
+use crate::AppState;
+use crate::dtos::auth::{LoginRequest, LoginResponse, UserLoginData};
+use crate::models::user::User;
+use crate::utils::jwt::{create_jwt, create_refresh_token};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use axum_extra::extract::cookie::CookieJar;
 use bcrypt::verify;
-use time::Duration;
-use chrono::{Utc, Duration as ChronoDuration};
+use chrono::{Duration as ChronoDuration, Utc};
 use std::sync::Arc;
-use crate::AppState;
-use crate::models::user::User;
-use crate::dtos::auth::{LoginRequest, LoginResponse, UserLoginData};
-use crate::utils::jwt::{create_jwt, create_refresh_token};
+use time::Duration;
 // removed unused imports: sqlx::Row, serde_json::json
 use axum_extra::extract::cookie::Cookie;
 
@@ -42,13 +42,15 @@ pub async fn login_handler(
     let refresh_token = create_refresh_token(user_id.to_string(), 5).map_err(|e| e)?;
 
     let expires_at = Utc::now().naive_utc() + ChronoDuration::days(5);
-    sqlx::query("INSERT INTO refresh_tokens (user_id, token, revoked, expires_at) VALUES (?, ?, false, ?)")
-        .bind(user_id)
-        .bind(&refresh_token)
-        .bind(expires_at)
-        .execute(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    sqlx::query(
+        "INSERT INTO refresh_tokens (user_id, token, revoked, expires_at) VALUES (?, ?, false, ?)",
+    )
+    .bind(user_id)
+    .bind(&refresh_token)
+    .bind(expires_at)
+    .execute(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let secure_cookie = std::env::var("SECURE_COOKIE").unwrap_or_else(|_| "false".into()) == "true";
 

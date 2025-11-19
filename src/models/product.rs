@@ -1,7 +1,7 @@
 // src/models/product.rs
 
-use sqlx::{ MySql, Pool, Executor }; // Import Executor untuk find_by_id generik
-use crate::dtos::product::{ NewRodProductDto, RodProductDetail, RodProduct };
+use crate::dtos::product::{NewRodProductDto, RodProduct, RodProductDetail};
+use sqlx::{Executor, MySql, Pool}; // Import Executor untuk find_by_id generik
 
 // Catatan: RodProduct di sini adalah nama struct yang digunakan untuk mengelompokkan method.
 
@@ -9,7 +9,7 @@ impl RodProduct {
     // --- 1. INSERT (CREATE) ---
     pub async fn insert(
         pool: &Pool<MySql>,
-        new_product: NewRodProductDto
+        new_product: NewRodProductDto,
     ) -> Result<u64, sqlx::Error> {
         let result = sqlx
             ::query(
@@ -38,7 +38,7 @@ impl RodProduct {
 
     // --- 2. FIND ALL DETAILS (READ ALL) ---
     pub async fn find_all_details(
-        pool: &Pool<MySql>
+        pool: &Pool<MySql>,
     ) -> Result<Vec<RodProductDetail>, sqlx::Error> {
         sqlx
             ::query_as::<_, RodProductDetail>(
@@ -59,7 +59,7 @@ impl RodProduct {
     // --- 3. FIND DETAIL BY ID (READ DETAIL) ---
     pub async fn find_detail_by_id(
         pool: &Pool<MySql>,
-        id: i64
+        id: i64,
     ) -> Result<Option<RodProductDetail>, sqlx::Error> {
         sqlx
             ::query_as::<_, RodProductDetail>(
@@ -82,20 +82,20 @@ impl RodProduct {
     // Menggunakan trait Executor untuk bisa menerima Pool atau &mut Transaction.
     pub async fn find_by_id(
         executor: impl Executor<'_, Database = MySql>,
-        id: i64
+        id: i64,
     ) -> Result<RodProduct, sqlx::Error> {
-        sqlx
-            ::query_as::<_, RodProduct>(
-                r#"
+        sqlx::query_as::<_, RodProduct>(
+            r#"
             SELECT id, name, description, category_id, rod_length, line_weight, cast_weight, 
                    action, material, power, reel_size, price, image_url
             FROM products 
             WHERE id = ?
-            "#
-            )
-            .bind(id)
-            // fetch_one akan mengembalikan error jika tidak ditemukan, yang bisa kita tangkap
-            .fetch_one(executor).await
+            "#,
+        )
+        .bind(id)
+        // fetch_one akan mengembalikan error jika tidak ditemukan, yang bisa kita tangkap
+        .fetch_one(executor)
+        .await
     }
 
     // --- 4. UPDATE ---
@@ -103,7 +103,7 @@ impl RodProduct {
     pub async fn update(
         pool: &Pool<MySql>,
         id: i64,
-        updated_product: NewRodProductDto
+        updated_product: NewRodProductDto,
     ) -> Result<u64, sqlx::Error> {
         let result = sqlx
             ::query(
@@ -134,7 +134,10 @@ impl RodProduct {
 
     // --- 5. DELETE ---
     pub async fn delete(pool: &Pool<MySql>, id: i64) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query("DELETE FROM products WHERE id = ?").bind(id).execute(pool).await?;
+        let result = sqlx::query("DELETE FROM products WHERE id = ?")
+            .bind(id)
+            .execute(pool)
+            .await?;
         Ok(result.rows_affected())
     }
 }

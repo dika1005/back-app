@@ -1,18 +1,26 @@
-use axum::{extract::{State, Query}, response::IntoResponse, Json, http::StatusCode};
-use axum_extra::extract::cookie::CookieJar;
-use oauth2::{basic::BasicClient, reqwest::async_http_client, AuthUrl, TokenUrl, ClientId, ClientSecret, RedirectUrl, AuthorizationCode, CsrfToken, Scope};
-use oauth2::TokenResponse as _OAuthTokenResponse;
-use serde_json::Value;
-use std::collections::HashMap;
-use std::sync::Arc;
 use crate::AppState;
-use crate::models::user::User;
 use crate::dtos::auth::LoginResponse;
 use crate::dtos::auth::UserLoginData;
+use crate::models::user::User;
 use crate::utils::jwt::create_jwt;
+use axum::{
+    Json,
+    extract::{Query, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use axum_extra::extract::cookie::Cookie;
-use time::Duration;
+use axum_extra::extract::cookie::CookieJar;
+use oauth2::TokenResponse as _OAuthTokenResponse;
+use oauth2::{
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope, TokenUrl,
+    basic::BasicClient, reqwest::async_http_client,
+};
+use serde_json::Value;
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Arc;
+use time::Duration;
 
 pub async fn google_auth_handler() -> impl IntoResponse {
     let client_id = ClientId::new(std::env::var("GOOGLE_CLIENT_ID").unwrap());
@@ -20,7 +28,8 @@ pub async fn google_auth_handler() -> impl IntoResponse {
     let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".into()).unwrap();
     let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".into()).unwrap();
 
-    let redirect_url = RedirectUrl::new("http://localhost:3001/auth/google/callback".into()).unwrap();
+    let redirect_url =
+        RedirectUrl::new("http://localhost:3001/auth/google/callback".into()).unwrap();
 
     let client = BasicClient::new(client_id, Some(client_secret), auth_url, Some(token_url))
         .set_redirect_uri(redirect_url);
@@ -31,7 +40,10 @@ pub async fn google_auth_handler() -> impl IntoResponse {
         .add_scope(Scope::new("profile".into()))
         .url();
 
-    (StatusCode::FOUND, [(axum::http::header::LOCATION, auth_url.to_string())])
+    (
+        StatusCode::FOUND,
+        [(axum::http::header::LOCATION, auth_url.to_string())],
+    )
 }
 
 pub async fn google_callback_handler(
@@ -54,12 +66,17 @@ pub async fn google_callback_handler(
     let client_secret = ClientSecret::new(std::env::var("GOOGLE_CLIENT_SECRET").unwrap());
     let auth_url = AuthUrl::new("https://accounts.google.com/o/oauth2/v2/auth".into()).unwrap();
     let token_url = TokenUrl::new("https://oauth2.googleapis.com/token".into()).unwrap();
-    let redirect_url = RedirectUrl::new("http://localhost:3001/auth/google/callback".into()).unwrap();
+    let redirect_url =
+        RedirectUrl::new("http://localhost:3001/auth/google/callback".into()).unwrap();
 
     let client = BasicClient::new(client_id, Some(client_secret), auth_url, Some(token_url))
         .set_redirect_uri(redirect_url);
 
-    let token_result = match client.exchange_code(AuthorizationCode::new(code)).request_async(async_http_client).await {
+    let token_result = match client
+        .exchange_code(AuthorizationCode::new(code))
+        .request_async(async_http_client)
+        .await
+    {
         Ok(token) => token,
         Err(e) => {
             eprintln!("Error exchange token: {:?}", e);
@@ -82,23 +99,39 @@ pub async fn google_callback_handler(
         Ok(res) => match res.json::<Value>().await {
             Ok(data) => data,
             Err(_) => {
-                return (StatusCode::BAD_REQUEST, Json(json!({"status":"error","message":"Gagal parsing data user"}))).into_response();
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({"status":"error","message":"Gagal parsing data user"})),
+                )
+                    .into_response();
             }
         },
         Err(_) => {
-            return (StatusCode::BAD_REQUEST, Json(json!({"status":"error","message":"Gagal mengambil data user"}))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"status":"error","message":"Gagal mengambil data user"})),
+            )
+                .into_response();
         }
     };
 
     let email = user_info["email"].as_str().unwrap_or("").to_string();
-    let name = user_info["name"].as_str().unwrap_or("Pengguna Google").to_string();
+    let name = user_info["name"]
+        .as_str()
+        .unwrap_or("Pengguna Google")
+        .to_string();
 
     if let Err(e) = User::upsert_google_user(&state.db, &email, &name).await {
         eprintln!("Error saat upsert Google user: {:?}", e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"status":"error","message":"Gagal menyimpan data pengguna"}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"status":"error","message":"Gagal menyimpan data pengguna"})),
+        )
+            .into_response();
     }
 
-    let token = create_jwt(email.clone(), "user".to_string(), 5).expect("Gagal membuat token JWT untuk Google Auth");
+    let token = create_jwt(email.clone(), "user".to_string(), 5)
+        .expect("Gagal membuat token JWT untuk Google Auth");
 
     let cookie = Cookie::build(("jwt", token.clone()))
         .http_only(true)
@@ -109,12 +142,19 @@ pub async fn google_callback_handler(
 
     let updated_jar = jar.add(cookie);
 
-    let user_data = UserLoginData { email: email.clone(), role: "user".to_string() };
+    let user_data = UserLoginData {
+        email: email.clone(),
+        role: "user".to_string(),
+    };
 
-    (updated_jar, Json(LoginResponse {
-        status: "success".into(),
-        message: "Login berhasil".into(),
-        token: Some(token),
-        user: Some(user_data),
-    })).into_response()
+    (
+        updated_jar,
+        Json(LoginResponse {
+            status: "success".into(),
+            message: "Login berhasil".into(),
+            token: Some(token),
+            user: Some(user_data),
+        }),
+    )
+        .into_response()
 }

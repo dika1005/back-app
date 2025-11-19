@@ -1,6 +1,6 @@
-use reqwest::Client;
-use serde_json::{json, Value};
 use crate::AppState;
+use reqwest::Client;
+use serde_json::{Value, json};
 
 #[allow(dead_code)]
 pub async fn create_midtrans_transaction(
@@ -33,4 +33,3 @@ pub async fn create_midtrans_transaction(
     let data = res.json::<Value>().await.map_err(|e| e.to_string())?;
     Ok(data)
 }
-    

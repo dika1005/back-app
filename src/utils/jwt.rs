@@ -1,6 +1,6 @@
-use chrono::{Utc, Duration as ChronoDuration};
-use jsonwebtoken::{encode, decode, Header, EncodingKey, DecodingKey, Validation, Algorithm};
 use axum::http::StatusCode;
+use chrono::{Duration as ChronoDuration, Utc};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 
 // Impor Claims dari dtos karena JWT utils menggunakannya
@@ -11,15 +11,18 @@ type Result<T> = std::result::Result<T, (StatusCode, String)>;
 
 /// Mengambil secret dari env dan menghitung waktu kedaluwarsa untuk access token (menit).
 fn get_jwt_config_minutes(duration_minutes: i64) -> Result<(EncodingKey, usize)> {
-    let secret = std::env
-        ::var("JWT_SECRET")
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET not set".into()))?;
+    let secret = std::env::var("JWT_SECRET").map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "JWT_SECRET not set".into(),
+        )
+    })?;
 
     let expiration = Utc::now()
         .checked_add_signed(ChronoDuration::minutes(duration_minutes))
         .ok_or((
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Gagal menghitung waktu kedaluwarsa JWT".into()
+            "Gagal menghitung waktu kedaluwarsa JWT".into(),
         ))?
         .timestamp() as usize;
 
@@ -33,14 +36,17 @@ fn get_refresh_config(duration_days: i64) -> Result<(EncodingKey, usize)> {
         .unwrap_or_else(|_| std::env::var("JWT_SECRET").unwrap_or_default());
 
     if secret.is_empty() {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, "REFRESH_TOKEN_SECRET or JWT_SECRET not set".into()));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "REFRESH_TOKEN_SECRET or JWT_SECRET not set".into(),
+        ));
     }
 
     let expiration = Utc::now()
         .checked_add_signed(ChronoDuration::days(duration_days))
         .ok_or((
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Gagal menghitung waktu kedaluwarsa refresh token".into()
+            "Gagal menghitung waktu kedaluwarsa refresh token".into(),
         ))?
         .timestamp() as usize;
 
@@ -73,7 +79,11 @@ pub fn create_jwt(sub: String, role: String, duration_minutes: i64) -> Result<St
 pub fn create_refresh_token(sub: String, duration_days: i64) -> Result<String> {
     let (encoding_key, expiration) = get_refresh_config(duration_days)?;
 
-    let claims = RefreshClaims { sub, exp: expiration, typ: "refresh".into() };
+    let claims = RefreshClaims {
+        sub,
+        exp: expiration,
+        typ: "refresh".into(),
+    };
 
     encode(&Header::default(), &claims, &encoding_key)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
@@ -81,14 +91,19 @@ pub fn create_refresh_token(sub: String, duration_days: i64) -> Result<String> {
 
 /// Verifikasi token JWT akses dan kembalikan claims ter-deserialize.
 pub fn verify_jwt(token: &str) -> Result<Claims> {
-    let secret = std::env::var("JWT_SECRET")
-        .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "JWT_SECRET not set".into()))?;
+    let secret = std::env::var("JWT_SECRET").map_err(|_| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "JWT_SECRET not set".into(),
+        )
+    })?;
 
     let token_data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
-    ).map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".into()))?;
+    )
+    .map_err(|_| (StatusCode::UNAUTHORIZED, "Token tidak valid".into()))?;
 
     Ok(token_data.claims)
 }
@@ -99,14 +114,18 @@ pub fn verify_refresh_token(token: &str) -> Result<RefreshClaims> {
         .unwrap_or_else(|_| std::env::var("JWT_SECRET").unwrap_or_default());
 
     if secret.is_empty() {
-        return Err((StatusCode::INTERNAL_SERVER_ERROR, "REFRESH_TOKEN_SECRET or JWT_SECRET not set".into()));
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "REFRESH_TOKEN_SECRET or JWT_SECRET not set".into(),
+        ));
     }
 
     let token_data = decode::<RefreshClaims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
-    ).map_err(|_| (StatusCode::UNAUTHORIZED, "Refresh token tidak valid".into()))?;
+    )
+    .map_err(|_| (StatusCode::UNAUTHORIZED, "Refresh token tidak valid".into()))?;
 
     if token_data.claims.typ != "refresh" {
         return Err((StatusCode::UNAUTHORIZED, "Token bukan tipe refresh".into()));

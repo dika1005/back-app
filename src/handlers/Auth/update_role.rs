@@ -1,11 +1,16 @@
-use axum::{extract::{State, Path}, response::IntoResponse, Json, http::StatusCode};
-use axum_extra::extract::cookie::CookieJar;
-use std::sync::Arc;
 use crate::AppState;
 use crate::dtos::auth::UpdateRoleRequest;
 use crate::models::user::User;
 use crate::utils::jwt::verify_jwt;
+use axum::{
+    Json,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use axum_extra::extract::cookie::CookieJar;
 use serde_json::json;
+use std::sync::Arc;
 
 pub async fn update_role_handler(
     State(state): State<Arc<AppState>>,
@@ -21,7 +26,10 @@ pub async fn update_role_handler(
     let claims = verify_jwt(&token).map_err(|(s, m)| (s, m))?;
 
     if claims.role != "admin" {
-        return Err((StatusCode::FORBIDDEN, "Kamu bukan admin, gak boleh ubah role!".into()));
+        return Err((
+            StatusCode::FORBIDDEN,
+            "Kamu bukan admin, gak boleh ubah role!".into(),
+        ));
     }
 
     if payload.role != "admin" && payload.role != "user" {
@@ -32,8 +40,11 @@ pub async fn update_role_handler(
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok((StatusCode::OK, Json(json!({
-        "status": "success",
-        "message": format!("Role {} berhasil diubah menjadi {}", email, payload.role)
-    }))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "message": format!("Role {} berhasil diubah menjadi {}", email, payload.role)
+        })),
+    ))
 }

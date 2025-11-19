@@ -1,16 +1,16 @@
-use axum::{ extract::State, response::IntoResponse, Json };
-use std::sync::Arc;
 use crate::AppState;
-use crate::utils::ApiResponse;
 use crate::dtos::product::RodProduct;
+use crate::utils::ApiResponse;
+use axum::{Json, extract::State, response::IntoResponse};
+use std::sync::Arc;
 
 pub async fn get_all_products(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match RodProduct::find_all_details(&state.db).await {
-        Ok(product_list) => {
-            Json(
-                ApiResponse::success_data("Daftar produk berhasil diambil", product_list)
-            ).into_response()
-        }
+        Ok(product_list) => Json(ApiResponse::success_data(
+            "Daftar produk berhasil diambil",
+            product_list,
+        ))
+        .into_response(),
         Err(e) => {
             eprintln!("Error fetching products: {}", e);
             (
@@ -20,7 +20,8 @@ pub async fn get_all_products(State(state): State<Arc<AppState>>) -> impl IntoRe
                     message: format!("Gagal mengambil daftar produk: {}", e),
                     data: None,
                 }),
-            ).into_response()
+            )
+                .into_response()
         }
     }
 }

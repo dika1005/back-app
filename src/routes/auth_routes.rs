@@ -1,14 +1,17 @@
-use axum::{Router, routing::{post, get}};
-use std::sync::Arc;
+use crate::AppState;
 use crate::handlers::auth::{
-    register::register_handler,
+    google::{google_auth_handler, google_callback_handler},
     login::login_handler,
     logout::logout_handler,
-    google::{google_auth_handler, google_callback_handler},
-    update_role::update_role_handler,
     refresh::refresh_handler,
+    register::register_handler,
+    update_role::update_role_handler,
 };
-use crate::AppState;
+use axum::{
+    Router,
+    routing::{get, post},
+};
+use std::sync::Arc;
 
 pub fn auth_routes() -> Router<Arc<AppState>> {
     Router::new()

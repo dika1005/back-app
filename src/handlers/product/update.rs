@@ -1,9 +1,13 @@
-use axum::{ extract::{State, Path, Json}, response::IntoResponse, http::StatusCode };
-use std::sync::Arc;
 use crate::AppState;
-use crate::utils::ApiResponse;
-use crate::dtos::product::{ NewRodProductDto, RodProduct };
+use crate::dtos::product::{NewRodProductDto, RodProduct};
 use crate::middleware::auth::AdminAuth;
+use crate::utils::ApiResponse;
+use axum::{
+    extract::{Json, Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use std::sync::Arc;
 
 type HandlerResult<T> = Result<T, (StatusCode, String)>;
 
@@ -14,10 +18,16 @@ pub async fn update_product(
     Json(updated_product_dto): Json<NewRodProductDto>,
 ) -> HandlerResult<impl IntoResponse> {
     match RodProduct::update(&state.db, product_id, updated_product_dto).await {
-        Ok(_) => Ok((StatusCode::OK, Json(ApiResponse::<()>::success("Produk berhasil diperbarui")))),
+        Ok(_) => Ok((
+            StatusCode::OK,
+            Json(ApiResponse::<()>::success("Produk berhasil diperbarui")),
+        )),
         Err(e) => {
             eprintln!("Error updating product: {}", e);
-            Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Gagal memperbarui produk: {}", e)))
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Gagal memperbarui produk: {}", e),
+            ))
         }
     }
 }

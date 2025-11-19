@@ -1,10 +1,9 @@
-use sqlx::{mysql::MySqlPoolOptions, MySql, Pool};
+use sqlx::{MySql, Pool, mysql::MySqlPoolOptions};
 use std::time::Duration;
 
 pub async fn init_db() -> Pool<MySql> {
     // Ambil DATABASE_URL dari .env
-    let db_url = std::env::var("DATABASE_URL")
-        .expect("⚠️ DATABASE_URL belum diset di file .env");
+    let db_url = std::env::var("DATABASE_URL").expect("⚠️ DATABASE_URL belum diset di file .env");
 
     println!("🔍 Menghubungkan ke MySQL...");
 

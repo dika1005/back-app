@@ -1,28 +1,26 @@
+use crate::{AppState, dtos::order::Order, middleware::auth::AdminAuth, utils::ApiResponse};
 use axum::{
-    extract::{State, Path, Json},
-    response::IntoResponse,
+    extract::{Json, Path, State},
     http::StatusCode,
+    response::IntoResponse,
 };
 use std::sync::Arc;
-use crate::{
-    AppState,
-    utils::ApiResponse,
-    dtos::order::Order,
-    middleware::auth::AdminAuth,
-};
 
 type HandlerResult<T> = Result<T, (StatusCode, String)>;
 
 fn internal_server_error(e: sqlx::Error) -> (StatusCode, String) {
     eprintln!("Database Error: {}", e);
-    (StatusCode::INTERNAL_SERVER_ERROR, "Terjadi kesalahan internal pada server.".to_string())
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        "Terjadi kesalahan internal pada server.".to_string(),
+    )
 }
 
 pub async fn process_payment(
     State(state): State<Arc<AppState>>,
     AdminAuth(_): AdminAuth,
     Path(order_id): Path<i64>,
-    Json(payload): Json<serde_json::Value>
+    Json(payload): Json<serde_json::Value>,
 ) -> HandlerResult<impl IntoResponse> {
     let is_success = payload["status"]
         .as_str()
@@ -35,10 +33,16 @@ pub async fn process_payment(
                 let status_msg = if is_success { "PAID" } else { "FAILED" };
                 Ok((
                     StatusCode::OK,
-                    Json(ApiResponse::<()>::success(&format!("Status Order {} diperbarui menjadi {}", order_id, status_msg))),
+                    Json(ApiResponse::<()>::success(&format!(
+                        "Status Order {} diperbarui menjadi {}",
+                        order_id, status_msg
+                    ))),
                 ))
             } else {
-                Err((StatusCode::NOT_FOUND, "Order tidak ditemukan atau sudah diproses.".to_string()))
+                Err((
+                    StatusCode::NOT_FOUND,
+                    "Order tidak ditemukan atau sudah diproses.".to_string(),
+                ))
             }
         }
         Err(e) => Err(internal_server_error(e)),
