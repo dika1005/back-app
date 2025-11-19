@@ -127,7 +127,13 @@ jobs:
         run: |
           # Install sqlx-cli to prepare query cache (no default features)
           cargo install sqlx-cli --no-default-features --features mysql
-          cargo sqlx prepare
+          cargo sqlx prepare --merged
+          
+      - name: Upload sqlx-data.json (for offline mode in future builds)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlx-data
+          path: sqlx-data.json
 
       - name: Format check
         run: cargo fmt -- --check
