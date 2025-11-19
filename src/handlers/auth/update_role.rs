@@ -23,7 +23,7 @@ pub async fn update_role_handler(
         None => return Err((StatusCode::UNAUTHORIZED, "Token tidak ditemukan".into())),
     };
 
-    let claims = verify_jwt(&token).map_err(|(s, m)| (s, m))?;
+    let claims = verify_jwt(&token)?;
 
     if claims.role != "admin" {
         return Err((

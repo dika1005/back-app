@@ -31,7 +31,7 @@ pub async fn refresh_handler(
         return Err((StatusCode::BAD_REQUEST, "refresh_token not provided".into()));
     };
 
-    let claims = verify_refresh_token(&refresh_token).map_err(|e| e)?;
+    let claims = verify_refresh_token(&refresh_token)?;
 
     let user_id: i64 = claims
         .sub
@@ -86,8 +86,8 @@ pub async fn refresh_handler(
         None => return Err((StatusCode::NOT_FOUND, "user not found".into())),
     };
 
-    let access = create_jwt(user_id.to_string(), role.clone(), 5).map_err(|e| e)?;
-    let refresh = create_refresh_token(user_id.to_string(), 5).map_err(|e| e)?;
+    let access = create_jwt(user_id.to_string(), role.clone(), 5)?;
+    let refresh = create_refresh_token(user_id.to_string(), 5)?;
     let new_expires_at = Utc::now().naive_utc() + ChronoDuration::days(5);
 
     sqlx::query(

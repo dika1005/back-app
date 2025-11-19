@@ -19,20 +19,17 @@ pub async fn logout_handler(
                 .bind(&email)
                 .fetch_optional(&state.db)
                 .await
+                && let Ok(user_id) = row.try_get::<i64, _>("id")
+                && let Err(e) =
+                    sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE user_id = ?")
+                        .bind(user_id)
+                        .execute(&state.db)
+                        .await
             {
-                if let Ok(user_id) = row.try_get::<i64, _>("id") {
-                    if let Err(e) =
-                        sqlx::query("UPDATE refresh_tokens SET revoked = true WHERE user_id = ?")
-                            .bind(user_id)
-                            .execute(&state.db)
-                            .await
-                    {
-                        eprintln!(
-                            "Failed to revoke refresh tokens for user {}: {:?}",
-                            user_id, e
-                        );
-                    }
-                }
+                eprintln!(
+                    "Failed to revoke refresh tokens for user {}: {:?}",
+                    user_id, e
+                );
             }
         }
     }

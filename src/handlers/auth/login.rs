@@ -36,10 +36,10 @@ pub async fn login_handler(
     }
 
     // access token 5 menit
-    let access_token = create_jwt(payload.email.clone(), role.clone(), 5).map_err(|e| e)?;
+    let access_token = create_jwt(payload.email.clone(), role.clone(), 5)?;
 
     // refresh token (5 hari)
-    let refresh_token = create_refresh_token(user_id.to_string(), 5).map_err(|e| e)?;
+    let refresh_token = create_refresh_token(user_id.to_string(), 5)?;
 
     let expires_at = Utc::now().naive_utc() + ChronoDuration::days(5);
     sqlx::query(
