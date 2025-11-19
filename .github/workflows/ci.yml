@@ -122,18 +122,10 @@ jobs:
         run: |
           echo "Listing tables in test_db:";
           mysql -h 127.0.0.1 -uroot -proot -e "SHOW TABLES IN test_db;"
-
-      - name: Prepare SQLx (generate offline data)
-        run: |
-          # Install sqlx-cli to prepare query cache (no default features)
-          cargo install sqlx-cli --no-default-features --features mysql
-          cargo sqlx prepare
-          
-      - name: Upload sqlx-data.json (for offline mode in future builds)
-        uses: actions/upload-artifact@v4
-        with:
-          name: sqlx-data
-          path: sqlx-data.json
+          echo "Describing kategori table:";
+          mysql -h 127.0.0.1 -uroot -proot test_db -e "DESCRIBE kategori;"
+          echo "Describing orders table:";
+          mysql -h 127.0.0.1 -uroot -proot test_db -e "DESCRIBE orders;"
 
       - name: Format check
         run: cargo fmt -- --check
