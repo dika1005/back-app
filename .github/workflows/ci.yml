@@ -118,11 +118,16 @@ jobs:
 
           mysql -h 127.0.0.1 -uroot -proot test_db < schema.sql
 
+      - name: Verify test DB tables
+        run: |
+          echo "Listing tables in test_db:";
+          mysql -h 127.0.0.1 -uroot -proot -e "SHOW TABLES IN test_db;"
+
       - name: Prepare SQLx (generate offline data)
         run: |
           # Install sqlx-cli to prepare query cache (no default features)
-          cargo install sqlx-cli --no-default-features --features mysql || true
-          cargo sqlx prepare || true
+          cargo install sqlx-cli --no-default-features --features mysql
+          cargo sqlx prepare
 
       - name: Format check
         run: cargo fmt -- --check
