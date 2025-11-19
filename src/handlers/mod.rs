@@ -1,5 +1,5 @@
 pub mod auth;
 pub mod category;
-pub mod user_handlers;
-pub mod product_handlers;
+pub mod user;
+pub mod product;
 pub mod order;

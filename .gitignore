@@ -1,2 +1,5 @@
 /target
 .env
+# Ignore local API test script that may contain secrets
+/scripts/run_api_tests.ps1
+.run_api_tests.ps1

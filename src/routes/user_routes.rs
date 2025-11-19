@@ -1,5 +1,5 @@
 use axum::{Router, routing::{get, put}};
-use crate::handlers::user_handlers::{get_profile, update_profile};
+use crate::handlers::user::profile::{get_profile, update_profile};
 use crate::AppState;
 use std::sync::Arc;
 

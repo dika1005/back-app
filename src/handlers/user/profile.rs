@@ -2,18 +2,15 @@ use axum::{ extract::{ State, Json }, response::IntoResponse, http::StatusCode }
 use std::sync::Arc;
 
 use crate::middleware::auth::AuthUser;
-use crate::AppState; 
+use crate::AppState;
 use crate::utils::ApiResponse;
-// Import UserProfile (jika dipindahkan ke model), atau gunakan dari model
-use crate::models::user::{ User };
+use crate::models::user::User;
 use crate::dtos::user::UpdateProfile;
-
 
 pub async fn get_profile(
     State(state): State<Arc<AppState>>,
     AuthUser { email, .. }: AuthUser
 ) -> impl IntoResponse {
-    // 1. Panggil method dari model
     let result = User::find_profile_by_email(&state.db, &email).await;
 
     match result {
@@ -45,10 +42,8 @@ pub async fn update_profile(
     AuthUser { email, .. }: AuthUser,
     Json(payload): Json<UpdateProfile>
 ) -> impl IntoResponse {
-    // NOTE PENTING: Password harus di-hash di handler sebelum dikirim ke model!
     let mut hashed_password: Option<String> = None;
     if let Some(ref password) = payload.password {
-        // Hash password menggunakan bcrypt
         match bcrypt::hash(password, bcrypt::DEFAULT_COST) {
             Ok(hash) => {
                 hashed_password = Some(hash);
@@ -66,7 +61,6 @@ pub async fn update_profile(
         }
     }
 
-    // 1. Panggil method dari model dengan data yang sudah diproses (hashed)
     let result = User::update_profile_data(
         &state.db,
         &email,

@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    name: Build & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Format check
+        run: cargo fmt -- --check
+
+      - name: Lint (clippy)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run unit tests
+        run: cargo test --all --release
+
+  api-tests:
+    name: API E2E (PowerShell)
+    needs: build
+    runs-on: windows-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: test_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=2s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/test_db
+      MIDTRANS_SERVER_KEY: ${{ secrets.MIDTRANS_SERVER_KEY }}
+      MIDTRANS_CLIENT_KEY: ${{ secrets.MIDTRANS_CLIENT_KEY }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Wait for MySQL to be ready
+        shell: pwsh
+        run: |
+          $max=30; $i=0
+          while ($i -lt $max) {
+            try {
+              mysql -h 127.0.0.1 -uroot -proot -e "SELECT 1" | Out-Null
+              break
+            } catch {
+              Start-Sleep -Seconds 2
+              $i++
+            }
+          }
+          if ($i -ge $max) { Write-Error "MySQL didn't start" }
+
+      - name: (Optional) Run DB migrations
+        shell: pwsh
+        run: |
+          # Uncomment if you have sqlx migrations and sqlx-cli installed
+          # cargo install sqlx-cli --no-default-features --features mysql
+          # sqlx database create
+          # sqlx migrate run
+
+      - name: Start server (background)
+        shell: pwsh
+        run: |
+          Start-Process -NoNewWindow -FilePath 'cargo' -ArgumentList 'run' 
+          # wait a bit for server to start
+          Start-Sleep -Seconds 6
+
+      - name: Wait for server to respond
+        shell: pwsh
+        run: |
+          $ready = $false
+          for ($i=0; $i -lt 30; $i++) {
+            try {
+              Invoke-WebRequest -Uri 'http://127.0.0.1:3001' -UseBasicParsing -TimeoutSec 2 | Out-Null
+              $ready = $true; break
+            } catch { Start-Sleep -Seconds 2 }
+          }
+          if (-not $ready) { Write-Error 'Server not responding on port 3001' }
+
+      - name: Run API tests (PowerShell)
+        shell: pwsh
+        env:
+          ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        run: |
+          .\scripts\run_api_tests.ps1 -BaseUrl 'http://127.0.0.1:3001' -AdminEmail $env:ADMIN_EMAIL -AdminPassword $env:ADMIN_PASSWORD
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-logs
+          path: ./tmp/api_test_results || .  # adjust if you save logs
