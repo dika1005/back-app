@@ -10,6 +10,21 @@ jobs:
   build:
     name: Build & Tests
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: test_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=2s
+          --health-retries=10
+    env:
+      DATABASE_URL: mysql://root:root@127.0.0.1:3306/test_db
     steps:
       - uses: actions/checkout@v4
 
@@ -27,6 +42,21 @@ jobs:
         with:
           toolchain: stable
           override: true
+
+      - name: Wait for MySQL to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if mysql -h 127.0.0.1 -uroot -proot -e "SELECT 1" >/dev/null 2>&1; then
+              echo "MySQL is ready"; break
+            fi
+            echo "Waiting for MySQL..."; sleep 1
+          done
+
+      - name: Prepare SQLx (generate offline data)
+        run: |
+          # Install sqlx-cli to prepare query cache (no default features)
+          cargo install sqlx-cli --no-default-features --features mysql || true
+          cargo sqlx prepare || true
 
       - name: Format check
         run: cargo fmt -- --check
