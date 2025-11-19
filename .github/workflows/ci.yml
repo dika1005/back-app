@@ -95,7 +95,8 @@ jobs:
             total_amount DOUBLE,
             shipping_address TEXT,
             payment_method VARCHAR(100),
-            status VARCHAR(50)
+            status VARCHAR(50),
+            order_date DATETIME DEFAULT CURRENT_TIMESTAMP
           );
 
           CREATE TABLE IF NOT EXISTS order_items (
