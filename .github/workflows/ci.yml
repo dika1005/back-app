@@ -136,7 +136,7 @@ jobs:
   api-tests:
     name: API E2E (PowerShell)
     needs: build
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     services:
       mysql:
         image: mysql:8
@@ -173,23 +173,20 @@ jobs:
         with:
           toolchain: stable
 
-      - name: Wait for MySQL to be ready
-        shell: pwsh
+      - name: Install MySQL client
         run: |
-          $max=30; $i=0
-          while ($i -lt $max) {
-            try {
-              mysql -h 127.0.0.1 -uroot -proot -e "SELECT 1" | Out-Null
-              break
-            } catch {
-              Start-Sleep -Seconds 2
-              $i++
-            }
-          }
-          if ($i -ge $max) { Write-Error "MySQL didn't start" }
+          sudo apt-get update && sudo apt-get install -y default-mysql-client
+
+      - name: Wait for MySQL to be ready
+        run: |
+          for i in $(seq 1 30); do
+            if mysql -h 127.0.0.1 -uroot -proot -e "SELECT 1" >/dev/null 2>&1; then
+              echo "MySQL is ready"; break
+            fi
+            echo "Waiting for MySQL..."; sleep 2
+          done
 
       - name: (Optional) Run DB migrations
-        shell: pwsh
         run: |
           # Uncomment if you have sqlx migrations and sqlx-cli installed
           # cargo install sqlx-cli --no-default-features --features mysql
@@ -197,23 +194,22 @@ jobs:
           # sqlx migrate run
 
       - name: Start server (background)
-        shell: pwsh
         run: |
-          Start-Process -NoNewWindow -FilePath 'cargo' -ArgumentList 'run' 
-          # wait a bit for server to start
-          Start-Sleep -Seconds 6
+          nohup cargo run > /tmp/server.log 2>&1 &
+          sleep 6
 
       - name: Wait for server to respond
-        shell: pwsh
         run: |
-          $ready = $false
-          for ($i=0; $i -lt 30; $i++) {
-            try {
-              Invoke-WebRequest -Uri 'http://127.0.0.1:3001' -UseBasicParsing -TimeoutSec 2 | Out-Null
-              $ready = $true; break
-            } catch { Start-Sleep -Seconds 2 }
-          }
-          if (-not $ready) { Write-Error 'Server not responding on port 3001' }
+          ready=false
+          for i in $(seq 1 30); do
+            if curl -sS --max-time 2 http://127.0.0.1:3001 >/dev/null 2>&1; then
+              ready=true; break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "true" ]; then
+            echo "Server not responding on port 3001"; cat /tmp/server.log; exit 1
+          fi
 
       - name: Run API tests (PowerShell)
         shell: pwsh
@@ -221,7 +217,7 @@ jobs:
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
         run: |
-          .\scripts\run_api_tests.ps1 -BaseUrl 'http://127.0.0.1:3001' -AdminEmail $env:ADMIN_EMAIL -AdminPassword $env:ADMIN_PASSWORD
+          pwsh -NoProfile -NonInteractive -ExecutionPolicy Bypass -File ./scripts/run_api_tests.ps1 -BaseUrl 'http://127.0.0.1:3001' -AdminEmail $env:ADMIN_EMAIL -AdminPassword $env:ADMIN_PASSWORD
 
       - name: Upload logs on failure
         if: failure()
