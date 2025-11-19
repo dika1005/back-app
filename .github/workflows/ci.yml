@@ -58,6 +58,7 @@ jobs:
 
       - name: Create test DB schema
         run: |
+          set -e
           cat > schema.sql <<'SQL'
           CREATE TABLE IF NOT EXISTS users (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -115,17 +116,29 @@ jobs:
             expires_at DATETIME
           );
           SQL
-
+          
+          echo "Running schema creation..."
           mysql -h 127.0.0.1 -uroot -proot test_db < schema.sql
+          if [ $? -ne 0 ]; then
+            echo "Schema creation failed!"
+            exit 1
+          fi
+          echo "Schema created successfully"
 
       - name: Verify test DB tables
         run: |
-          echo "Listing tables in test_db:";
+          set -e
+          echo "=== Listing tables in test_db ==="
           mysql -h 127.0.0.1 -uroot -proot -e "SHOW TABLES IN test_db;"
-          echo "Describing kategori table:";
-          mysql -h 127.0.0.1 -uroot -proot test_db -e "DESCRIBE kategori;"
-          echo "Describing orders table:";
-          mysql -h 127.0.0.1 -uroot -proot test_db -e "DESCRIBE orders;"
+          echo ""
+          echo "=== Describing kategori table ==="
+          mysql -h 127.0.0.1 -uroot -proot test_db -e "DESCRIBE kategori;" || echo "kategori table not found!"
+          echo ""
+          echo "=== Describing orders table ==="
+          mysql -h 127.0.0.1 -uroot -proot test_db -e "DESCRIBE orders;" || echo "orders table not found!"
+          echo ""
+          echo "=== Checking DATABASE_URL ==="
+          echo "DATABASE_URL=$DATABASE_URL"
 
       - name: Format check
         run: cargo fmt -- --check
