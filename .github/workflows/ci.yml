@@ -91,12 +91,12 @@ jobs:
 
           CREATE TABLE IF NOT EXISTS orders (
             id BIGINT PRIMARY KEY AUTO_INCREMENT,
-            user_id BIGINT,
-            total_amount DOUBLE,
-            shipping_address TEXT,
-            payment_method VARCHAR(100),
-            status VARCHAR(50),
-            order_date DATETIME DEFAULT CURRENT_TIMESTAMP
+            user_id BIGINT NOT NULL,
+            total_amount DOUBLE NOT NULL,
+            shipping_address TEXT NOT NULL,
+            payment_method VARCHAR(100) NOT NULL,
+            status VARCHAR(50) NOT NULL,
+            order_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
           );
 
           CREATE TABLE IF NOT EXISTS order_items (
