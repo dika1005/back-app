@@ -2,7 +2,6 @@ use crate::utils::jwt::verify_jwt;
 use axum::extract::FromRequestParts;
 use axum::http::{StatusCode, request::Parts};
 use axum_extra::extract::cookie::CookieJar; // <--- ini penting
-use std::future::Future;
 
 #[derive(Clone, Debug)]
 pub struct AuthUser {
