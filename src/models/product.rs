@@ -1,9 +1,8 @@
 // src/models/product.rs
 
 use crate::dtos::product::{NewRodProductDto, RodProduct, RodProductDetail};
-use sqlx::{Executor, MySql, Pool}; // Import Executor untuk find_by_id generik
-
-// Catatan: RodProduct di sini adalah nama struct yang digunakan untuk mengelompokkan method.
+use sqlx::{Executor, MySql, MySqlPool, Pool}; 
+use crate::dtos::pagination::{PaginatedResponse, PaginationMeta, PaginationParams};
 
 impl RodProduct {
     // --- 1. INSERT (CREATE) ---
@@ -11,8 +10,7 @@ impl RodProduct {
         pool: &Pool<MySql>,
         new_product: NewRodProductDto,
     ) -> Result<u64, sqlx::Error> {
-        let result = sqlx
-            ::query(
+        let result = sqlx::query(
                 r#"
                 INSERT INTO products (name, description, category_id, rod_length, line_weight, cast_weight, 
                                       action, material, power, reel_size, price, image_url)
@@ -40,8 +38,7 @@ impl RodProduct {
     pub async fn find_all_details(
         pool: &Pool<MySql>,
     ) -> Result<Vec<RodProductDetail>, sqlx::Error> {
-        sqlx
-            ::query_as::<_, RodProductDetail>(
+        sqlx::query_as::<_, RodProductDetail>(
                 r#"
                 SELECT 
                     p.id, p.name, p.description, 
@@ -61,8 +58,7 @@ impl RodProduct {
         pool: &Pool<MySql>,
         id: i64,
     ) -> Result<Option<RodProductDetail>, sqlx::Error> {
-        sqlx
-            ::query_as::<_, RodProductDetail>(
+        sqlx::query_as::<_, RodProductDetail>(
                 r#"
                 SELECT
                     p.id, p.name, p.description, 
@@ -79,7 +75,6 @@ impl RodProduct {
     }
 
     // 🌟 FUNGSI BARU: FIND BY ID (DIPERLUKAN OLEH MODEL ORDER) 🌟
-    // Menggunakan trait Executor untuk bisa menerima Pool atau &mut Transaction.
     pub async fn find_by_id(
         executor: impl Executor<'_, Database = MySql>,
         id: i64,
@@ -93,20 +88,17 @@ impl RodProduct {
             "#,
         )
         .bind(id)
-        // fetch_one akan mengembalikan error jika tidak ditemukan, yang bisa kita tangkap
         .fetch_one(executor)
         .await
     }
 
     // --- 4. UPDATE ---
-    // Diubah agar mengembalikan u64 (rows_affected) untuk cek 404 di handler
     pub async fn update(
         pool: &Pool<MySql>,
         id: i64,
         updated_product: NewRodProductDto,
     ) -> Result<u64, sqlx::Error> {
-        let result = sqlx
-            ::query(
+        let result = sqlx::query(
                 r#"
                 UPDATE products SET 
                     name = ?, description = ?, category_id = ?, rod_length = ?, line_weight = ?, cast_weight = ?, 
@@ -140,4 +132,39 @@ impl RodProduct {
             .await?;
         Ok(result.rows_affected())
     }
+
+    // --- 6. GET ALL PAGINATED ---
+    pub async fn get_all_paginated(
+        pool: &MySqlPool,
+        params: PaginationParams,
+    ) -> Result<PaginatedResponse<RodProduct>, sqlx::Error> {
+        let offset = params.offset();
+        let limit = params.per_page;
+
+        // Get total count
+        let total: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM products")
+            .fetch_one(pool)
+            .await?;
+
+        // Get paginated products
+        let products = sqlx::query_as::<_, RodProduct>(
+            r#"
+            SELECT id, name, description, category_id, rod_length, line_weight, cast_weight, 
+                   action, material, power, reel_size, price, image_url
+            FROM products
+            ORDER BY id DESC
+            LIMIT ? OFFSET ?
+            "#
+        )
+        .bind(limit as i64)
+        .bind(offset as i64)
+        .fetch_all(pool)
+        .await?;
+
+        Ok(PaginatedResponse {
+            data: products,
+            pagination: PaginationMeta::new(params.page, params.per_page, total.0 as u32),
+        })
+    }
 }
+

@@ -75,7 +75,8 @@ pub async fn login_handler(
         Json(LoginResponse {
             status: "success".into(),
             message: "Login berhasil!".into(),
-            token: Some(access_token),
+            access_token: Some(access_token),
+            refresh_token: Some(refresh_token),
             user: Some(UserLoginData {
                 email: payload.email,
                 role: role.clone(),

@@ -152,7 +152,8 @@ pub async fn google_callback_handler(
         Json(LoginResponse {
             status: "success".into(),
             message: "Login berhasil".into(),
-            token: Some(token),
+            access_token: Some(token),
+            refresh_token: None,
             user: Some(user_data),
         }),
     )

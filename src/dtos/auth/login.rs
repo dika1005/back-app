@@ -10,7 +10,8 @@ pub struct LoginRequest {
 pub struct LoginResponse {
     pub status: String,
     pub message: String,
-    pub token: Option<String>,
+    pub access_token: Option<String>,
+    pub refresh_token: Option<String>,
     pub user: Option<UserLoginData>,
 }
 

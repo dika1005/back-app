@@ -1,14 +1,18 @@
 use crate::AppState;
 use crate::dtos::product::RodProduct;
 use crate::utils::ApiResponse;
-use axum::{Json, extract::State, response::IntoResponse};
+use axum::{Json, extract::{State, Query}, response::IntoResponse};
 use std::sync::Arc;
+use crate::dtos::pagination::PaginationParams;
 
-pub async fn get_all_products(State(state): State<Arc<AppState>>) -> impl IntoResponse {
-    match RodProduct::find_all_details(&state.db).await {
-        Ok(product_list) => Json(ApiResponse::success_data(
+pub async fn get_all_products(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<PaginationParams>,
+) -> impl IntoResponse {
+    match RodProduct::get_all_paginated(&state.db, params).await {
+        Ok(paginated) => Json(ApiResponse::success_data(
             "Daftar produk berhasil diambil",
-            product_list,
+            paginated,
         ))
         .into_response(),
         Err(e) => {
