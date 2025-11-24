@@ -2,4 +2,7 @@
 .env
 # Ignore local API test script that may contain secrets
 /scripts/run_api_tests.ps1
-.run_api_tests.ps1
+/scripts/run_api_tests.ps1
+/scripts/test_chatbot.ps1
+/scripts/test_chatbot2.ps1
+/scripts/test_pagination.ps1

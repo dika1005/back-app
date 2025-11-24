@@ -1,13 +1,9 @@
-use axum::{
-    Router,
-    routing::{get, post},
-    serve,
-};
+use axum::{ Router, routing::{ get, post }, serve };
 use dotenvy::dotenv;
-use sqlx::{MySql, Pool};
-use std::{env, net::SocketAddr, sync::Arc};
+use sqlx::{ MySql, Pool };
+use std::{ env, net::SocketAddr, sync::Arc };
 use tokio::net::TcpListener;
-use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
+use tower_http::cors::{ AllowHeaders, AllowMethods, AllowOrigin, CorsLayer };
 
 mod db;
 mod dtos;
@@ -20,8 +16,12 @@ mod utils;
 // IMPORT SEMUA RUTE DAN HANDLER WEBHOOK
 use crate::handlers::order::webhook::webhook_payment;
 use routes::{
-    auth_routes::auth_routes, category_routes::category_routes, order_routes::order_routes,
-    product_routes::product_routes, user_routes::user_routes,
+    auth_routes::auth_routes,
+    category_routes::category_routes,
+    order_routes::order_routes,
+    product_routes::product_routes,
+    user_routes::user_routes,
+    chatbot_routes::chatbot_routes,
 }; // <<< IMPORT HANDLER WEBHOOK DARI SINI >>>
 
 // ========================
@@ -46,11 +46,14 @@ async fn main() {
     let db_pool = db::init_db().await;
 
     // 🧩 2. Ambil variabel Midtrans dari .env
-    let midtrans_server_key =
-        env::var("MIDTRANS_SERVER_KEY").expect("MIDTRANS_SERVER_KEY belum diset di .env");
-    let midtrans_client_key =
-        env::var("MIDTRANS_CLIENT_KEY").expect("MIDTRANS_CLIENT_KEY belum diset di .env");
-    let midtrans_base_url = env::var("MIDTRANS_BASE_URL")
+    let midtrans_server_key = env
+        ::var("MIDTRANS_SERVER_KEY")
+        .expect("MIDTRANS_SERVER_KEY belum diset di .env");
+    let midtrans_client_key = env
+        ::var("MIDTRANS_CLIENT_KEY")
+        .expect("MIDTRANS_CLIENT_KEY belum diset di .env");
+    let midtrans_base_url = env
+        ::var("MIDTRANS_BASE_URL")
         .unwrap_or_else(|_| "https://api.sandbox.midtrans.com".to_string());
 
     let shared_state = Arc::new(AppState {
@@ -60,7 +63,8 @@ async fn main() {
         midtrans_base_url,
     });
 
-    let app = Router::<Arc<AppState>>::new()
+    let app = Router::<Arc<AppState>>
+        ::new()
         .route("/", get(root_handler))
         .nest("/auth", auth_routes())
         .nest("/user", user_routes())
@@ -68,12 +72,15 @@ async fn main() {
         .nest("/products", product_routes())
         .nest("/orders", order_routes())
         .route("/webhook/payment", post(webhook_payment))
-        .with_state(shared_state)
-        .layer(cors_layer()); // tambahkan CORS layer
+        .nest("/chatbot", chatbot_routes())
+
+        .layer(cors_layer()) // tambahkan CORS layer
+        .with_state(shared_state);
 
     // --- 4. Jalankan Server ---
     let host = env::var("BIND_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
-    let port: u16 = env::var("BIND_PORT")
+    let port: u16 = env
+        ::var("BIND_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(3001);
