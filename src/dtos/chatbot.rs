@@ -1,13 +1,19 @@
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "message": "Saya pemula, butuh joran untuk mancing di laut budget 1-2 juta"
+}))]
 pub struct ChatRequest {
     pub message: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ChatResponse {
+    #[schema(example = "success")]
     pub status: String,
+    #[schema(example = "Rekomendasi berhasil")]
     pub message: String,
     pub recommendation: String,
 }

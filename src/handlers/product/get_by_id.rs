@@ -8,6 +8,22 @@ use axum::{
 };
 use std::sync::Arc;
 
+/// Get product by ID
+///
+/// Returns detailed information about a specific fishing rod product.
+#[utoipa::path(
+    get,
+    path = "/products/{id}",
+    tag = "products",
+    params(
+        ("id" = i64, Path, description = "Product ID")
+    ),
+    responses(
+        (status = 200, description = "Product details retrieved successfully"),
+        (status = 404, description = "Product not found"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn find_product_by_id(
     State(state): State<Arc<AppState>>,
     Path(product_id): Path<i64>,

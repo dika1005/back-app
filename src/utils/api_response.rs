@@ -1,10 +1,13 @@
 // src/utils/api_response.rs
 
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct ApiResponse<T> {
+    #[schema(example = "success")]
     pub status: String,
+    #[schema(example = "Operation completed successfully")]
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,

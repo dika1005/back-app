@@ -8,9 +8,28 @@ use std::sync::Arc;
 
 type HandlerResult<T> = Result<T, (StatusCode, String)>;
 
+/// Create a new product (Admin only)
+///
+/// Creates a new fishing rod product in the catalog.
+/// Requires admin authentication.
+#[utoipa::path(
+    post,
+    path = "/products/create",
+    tag = "products",
+    request_body = NewRodProductDto,
+    responses(
+        (status = 201, description = "Product created successfully"),
+        (status = 400, description = "Invalid input or category_id"),
+        (status = 401, description = "Unauthorized - Admin access required"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("jwt" = [])
+    )
+)]
 pub async fn create_product(
     State(state): State<Arc<AppState>>,
-    AdminAuth(_): AdminAuth,
+    _admin: AdminAuth,
     Json(new_product_dto): Json<NewRodProductDto>,
 ) -> HandlerResult<impl IntoResponse> {
     match RodProduct::insert(&state.db, new_product_dto).await {

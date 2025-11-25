@@ -4,6 +4,20 @@ use crate::dtos::product::RodProduct;
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use std::sync::Arc;
 
+/// Get AI product recommendations
+///
+/// Uses Groq AI (Llama 3.3 70B) to provide personalized fishing rod recommendations
+/// based on user's question or requirements.
+#[utoipa::path(
+    post,
+    path = "/chatbot/recommend",
+    tag = "chatbot",
+    request_body = ChatRequest,
+    responses(
+        (status = 200, description = "AI recommendation generated successfully", body = ChatResponse),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn chatbot_recommend(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<ChatRequest>,

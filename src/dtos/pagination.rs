@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct PaginationParams {
     #[serde(default = "default_page")]
+    #[schema(example = 1)]
     pub page: u32,
     #[serde(default = "default_limit")]
+    #[schema(example = 10)]
     pub per_page: u32,
 }
 
@@ -31,17 +34,21 @@ impl PaginationParams {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PaginatedResponse<T> {
     pub data: Vec<T>,
     pub pagination: PaginationMeta,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct PaginationMeta {
+    #[schema(example = 1)]
     pub current_page: u32,
+    #[schema(example = 10)]
     pub per_page: u32,
+    #[schema(example = 100)]
     pub total: u32,
+    #[schema(example = 10)]
     pub total_pages: u32,
 }
 

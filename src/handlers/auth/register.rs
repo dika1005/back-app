@@ -5,6 +5,21 @@ use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use bcrypt::{DEFAULT_COST, hash};
 use std::sync::Arc;
 
+/// Register a new user
+///
+/// Creates a new user account with name, email, and password.
+/// Password is hashed using bcrypt before storing.
+#[utoipa::path(
+    post,
+    path = "/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "User registered successfully", body = RegisterResponse),
+        (status = 400, description = "Email already exists"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn register_handler(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegisterRequest>,

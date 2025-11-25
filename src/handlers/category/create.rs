@@ -12,9 +12,27 @@ use std::sync::Arc;
 
 type HandlerResult<T> = Result<T, (StatusCode, String)>;
 
+/// Create a new category (Admin only)
+///
+/// Creates a new product category.
+/// Requires admin authentication.
+#[utoipa::path(
+    post,
+    path = "/categories/create",
+    tag = "categories",
+    request_body = NewKategoriDto,
+    responses(
+        (status = 201, description = "Category created successfully"),
+        (status = 401, description = "Unauthorized - Admin access required"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("jwt" = [])
+    )
+)]
 pub async fn create_category(
     State(state): State<Arc<AppState>>,
-    AdminAuth(_): AdminAuth,
+    _admin: AdminAuth,
     Json(new_kategori_dto): Json<NewKategoriDto>,
 ) -> HandlerResult<impl IntoResponse> {
     match KategoriModel::insert(&state.db, new_kategori_dto).await {

@@ -23,6 +23,24 @@ fn internal_server_error(e: sqlx::Error) -> (StatusCode, String) {
     )
 }
 
+/// Checkout and create order
+///
+/// Creates a new order and returns Midtrans payment URL.
+/// Requires user authentication.
+#[utoipa::path(
+    post,
+    path = "/orders/checkout",
+    tag = "orders",
+    request_body = NewOrderDto,
+    responses(
+        (status = 201, description = "Order created successfully with payment URL"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Internal server error")
+    ),
+    security(
+        ("jwt" = [])
+    )
+)]
 pub async fn checkout(
     State(state): State<Arc<AppState>>,
     auth_user: AuthUser,

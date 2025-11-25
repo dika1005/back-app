@@ -11,6 +11,21 @@ use time::Duration;
 // removed unused imports: sqlx::Row, serde_json::json
 use axum_extra::extract::cookie::Cookie;
 
+/// User login
+///
+/// Authenticates user with email and password.
+/// Returns JWT access token (5 min) and refresh token (5 days) as httpOnly cookies.
+#[utoipa::path(
+    post,
+    path = "/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful", body = LoginResponse),
+        (status = 401, description = "Invalid credentials"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn login_handler(
     State(state): State<Arc<AppState>>,
     jar: CookieJar,

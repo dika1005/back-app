@@ -4,6 +4,18 @@ use crate::utils::ApiResponse;
 use axum::{Json, extract::State, response::IntoResponse};
 use std::sync::Arc;
 
+/// Get all categories
+///
+/// Returns a list of all product categories.
+#[utoipa::path(
+    get,
+    path = "/categories",
+    tag = "categories",
+    responses(
+        (status = 200, description = "List of categories retrieved successfully"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_all_categories(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     match KategoriModel::find_all(&state.db).await {
         Ok(kategori_list) => Json(ApiResponse::success_data(

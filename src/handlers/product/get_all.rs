@@ -5,6 +5,21 @@ use axum::{Json, extract::{State, Query}, response::IntoResponse};
 use std::sync::Arc;
 use crate::dtos::pagination::PaginationParams;
 
+/// Get all products with pagination
+///
+/// Returns a paginated list of all fishing rod products with their details.
+#[utoipa::path(
+    get,
+    path = "/products",
+    tag = "products",
+    params(
+        PaginationParams
+    ),
+    responses(
+        (status = 200, description = "List of products retrieved successfully"),
+        (status = 500, description = "Internal server error")
+    )
+)]
 pub async fn get_all_products(
     State(state): State<Arc<AppState>>,
     Query(params): Query<PaginationParams>,
